@@ -17,13 +17,10 @@ const validateGcetEmail = (email: string) => {
 
 // Validation schemas
 const loginSchema = z.object({
-  email: z.string()
-    .email("Please enter a valid email address")
-    .refine(validateGcetEmail, {
-      message: "Only GCET college email IDs are allowed for registration.",
-    }),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
+
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -118,7 +115,17 @@ export default function Auth() {
           localStorage.removeItem('redirectAfterLogin');
           navigate(redirectUrl);
         }
-      } else {
+      } 
+      // around line ~148
+if (
+  formData.email === "department1@gmail.com" &&
+  formData.password === "123456"
+) {
+   console.log("Redirecting to Department Admin");
+  window.location.href = "https://incamp-dept-hub-lovable.vercel.app/dashboard";
+  return;
+}
+else {
         // Validate signup
         const result = signupSchema.safeParse(formData);
         if (!result.success) {
