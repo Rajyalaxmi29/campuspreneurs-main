@@ -122,7 +122,7 @@ if (
   formData.password === "123456"
 ) {
    console.log("Redirecting to Department Admin");
-  window.location.href = "https://incamp-dept-hub-lovable.vercel.app/dashboard";
+  window.location.href = "https://depart-admin-portal.vercel.app/dashboard";
   return;
 }
 else {
