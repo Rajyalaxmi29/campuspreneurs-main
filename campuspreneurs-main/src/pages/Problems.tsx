@@ -36,13 +36,13 @@ const themes = [
 
 interface ProblemStatement {
   id: string;
-  problem_statement_id: string;
-  title: string;
-  description: string;
-  detailed_description: string;
-  category: string;
-  theme: string;
-  department: string;
+  problem_statement_id: string | null;
+  title: string | null;
+  description: string | null;
+  detailed_description: string | null;
+  category: string | null;
+  theme: string | null;
+  department: string | null;
   created_at: string;
 }
 
@@ -160,14 +160,17 @@ export default function Problems() {
     setDetailsOpen(true);
   };
 
+  const normalize = (value: string | null | undefined) => (value ?? "").toLowerCase();
+  const normalizedSearch = normalize(searchQuery);
+
   const filteredProblems = problems.filter((problem) => {
     const matchesTheme = activeTheme === "All" || problem.theme === activeTheme;
     const matchesSearch =
-      problem.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      problem.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      problem.problem_statement_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      problem.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      problem.department.toLowerCase().includes(searchQuery.toLowerCase());
+      normalize(problem.title).includes(normalizedSearch) ||
+      normalize(problem.description).includes(normalizedSearch) ||
+      normalize(problem.problem_statement_id).includes(normalizedSearch) ||
+      normalize(problem.category).includes(normalizedSearch) ||
+      normalize(problem.department).includes(normalizedSearch);
     return matchesTheme && matchesSearch;
   });
 
