@@ -3,7 +3,7 @@ import { Mail, MapPin } from "lucide-react";
 
 const quickLinks = [
   { name: "Problem Statements", path: "/problems" },
-  { name: "Event Structure", path: "/event-structure" },
+  { name: "Events", path: "/events" },
   { name: "Resources", path: "/resources" },
   { name: "Registration", path: "/registration" },
   { name: "Contact", path: "/contact" },

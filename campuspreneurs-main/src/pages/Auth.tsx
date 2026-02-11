@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,15 +141,31 @@ else {
           return;
         }
 
+        // Check if email already exists in database
+        const { data: emailExists, error: checkError } = await supabase
+          .rpc('check_email_exists', { _email: formData.email });
+
+        if (checkError) {
+          toast({
+            title: "Error",
+            description: "Failed to check email availability.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (emailExists) {
+          setErrors({ email: "This email is already registered. Please log in instead." });
+          setLoading(false);
+          return;
+        }
+
         const { error } = await signUp(formData.email, formData.password, formData.name);
         if (error) {
           // Handle specific error messages
           if (error.message.includes("already registered")) {
-            toast({
-              title: "Account Exists",
-              description: "This email is already registered. Please log in instead.",
-              variant: "destructive",
-            });
+            setErrors({ email: "This email is already registered. Please log in instead." });
           } else {
             toast({
               title: "Sign Up Failed",
