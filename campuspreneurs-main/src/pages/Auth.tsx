@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
+
+const DEPARTMENT_ADMIN_URL = "https://depart-admin-portal.vercel.app/dashboard";
 
 // Email validation function for GCET domain
 const validateGcetEmail = (email: string) => {
@@ -41,6 +43,7 @@ export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isPostLoginRouting, setIsPostLoginRouting] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -54,12 +57,38 @@ export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const routeUserAfterLogin = useCallback(async (userId: string, fallbackUrl: string) => {
+    const { data: roleRows, error: roleError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    if (roleError) {
+      console.error("Error checking user role after login:", roleError);
+      navigate(fallbackUrl, { replace: true });
+      return;
+    }
+
+    const isDeptAdmin = (roleRows || []).some(
+      (row) => String((row as { role?: unknown }).role) === "deptadmin"
+    );
+
+    if (isDeptAdmin) {
+      window.location.replace(DEPARTMENT_ADMIN_URL);
+      return;
+    }
+
+    navigate(fallbackUrl, { replace: true });
+  }, [navigate]);
+
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      navigate("/");
+    if (!user || isPostLoginRouting) {
+      return;
     }
-  }, [user, navigate]);
+
+    void routeUserAfterLogin(user.id, "/");
+  }, [user, isPostLoginRouting, routeUserAfterLogin]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -77,6 +106,8 @@ export default function Auth() {
 
     try {
       if (isLogin) {
+        setIsPostLoginRouting(true);
+
         // Validate login
         const result = loginSchema.safeParse(formData);
         if (!result.success) {
@@ -88,6 +119,7 @@ export default function Auth() {
           });
           setErrors(fieldErrors);
           setLoading(false);
+          setIsPostLoginRouting(false);
           return;
         }
 
@@ -107,26 +139,26 @@ export default function Auth() {
               variant: "destructive",
             });
           }
+          setIsPostLoginRouting(false);
         } else {
+          const { data: authUserData } = await supabase.auth.getUser();
+          const signedInUser = authUserData.user;
+
           toast({
             title: "Welcome back!",
             description: "You have successfully logged in.",
           });
-          const redirectUrl = localStorage.getItem('redirectAfterLogin') || '/';
-          localStorage.removeItem('redirectAfterLogin');
-          navigate(redirectUrl);
+
+          if (!signedInUser) {
+            setIsPostLoginRouting(false);
+            return;
+          }
+
+          const redirectUrl = localStorage.getItem("redirectAfterLogin") || "/";
+          localStorage.removeItem("redirectAfterLogin");
+          await routeUserAfterLogin(signedInUser.id, redirectUrl);
         }
-      } 
-      // around line ~148
-if (
-  formData.email === "department1@gmail.com" &&
-  formData.password === "123456"
-) {
-   console.log("Redirecting to Department Admin");
-  window.location.href = "https://depart-admin-portal.vercel.app/dashboard";
-  return;
-}
-else {
+      } else {
         // Validate signup
         const result = signupSchema.safeParse(formData);
         if (!result.success) {
@@ -182,6 +214,9 @@ else {
         }
       }
     } catch (err) {
+      if (isLogin) {
+        setIsPostLoginRouting(false);
+      }
       toast({
         title: "Error",
         description: "An unexpected error occurred. Please try again.",
