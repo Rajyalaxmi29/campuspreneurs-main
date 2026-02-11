@@ -123,7 +123,7 @@ INSERT INTO public.page_content (page_name, section_key, content) VALUES
   {"role": "Co-Coordinator", "name": "Sunita Rao", "email": "sunita.rao@gcet.edu.in", "phone": "+91 98765 43215"}
 ]'),
 ('contact', 'general_info', '{
-  "email": "campuspreneurs@gcet.edu.in",
+  "email": "incamp@gcet.edu.in",
   "phone": "+91 12345 67890",
   "address": "GCET Campus, Knowledge Park II, Greater Noida, Uttar Pradesh 201310, India"
 }');

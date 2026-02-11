@@ -38,11 +38,11 @@ export function Navbar() {
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <img
               src="/favicon.png"
-              alt="Campuspreneurs Logo"
+              alt="Incamp Logo"
               className="w-9 h-9 rounded-lg"
             />
             <span className="font-semibold text-lg hidden sm:block">
-              Campuspreneurs
+              Incamp
             </span>
           </Link>
 
@@ -158,3 +158,4 @@ export function Navbar() {
     </header>
   );
 }
+

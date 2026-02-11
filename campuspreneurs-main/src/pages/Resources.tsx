@@ -28,7 +28,7 @@ interface Resource {
 
 const faqs = [
   {
-    question: "Who can participate in Campuspreneurs?",
+    question: "Who can participate in Incamp?",
     answer: "Any student currently enrolled in GCET across all departments can participate. Teams must have 3-5 members.",
   },
   {
@@ -37,7 +37,7 @@ const faqs = [
   },
   {
     question: "What is the registration fee?",
-    answer: "Participation is free of cost. There are no registration fees for Campuspreneurs Chapter 1.",
+    answer: "Participation is free of cost. There are no registration fees for Incamp Chapter 1.",
   },
   {
     question: "Can we change our problem statement after registration?",
@@ -296,3 +296,4 @@ export default function Resources() {
     </Layout>
   );
 }
+

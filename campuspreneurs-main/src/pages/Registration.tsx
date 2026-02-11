@@ -210,7 +210,7 @@ export default function Registration() {
       setIsSubmitted(true);
       toast({
         title: "Registration Successful!",
-        description: "Your team has been registered for Campuspreneurs Chapter 1.",
+        description: "Your team has been registered for Incamp Chapter 1.",
       });
 
     } catch (error) {
@@ -237,7 +237,7 @@ export default function Registration() {
                 Registration Complete!
               </h1>
               <p className="mt-4 text-muted-foreground">
-                Thank you for registering for Campuspreneurs Chapter 1. You will receive a confirmation email shortly with further instructions.
+                Thank you for registering for Incamp Chapter 1. You will receive a confirmation email shortly with further instructions.
               </p>
               <Button
                 variant="default"
@@ -263,7 +263,7 @@ export default function Registration() {
             Team Registration
           </h1>
           <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
-            Register your team for Campuspreneurs Chapter 1. Fill in all the required details below.
+            Register your team for Incamp Chapter 1. Fill in all the required details below.
           </p>
         </div>
       </section>
@@ -535,3 +535,4 @@ export default function Registration() {
     </Layout>
   );
 }
+

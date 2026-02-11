@@ -20,7 +20,7 @@ export function Footer() {
               <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
                 <span className="text-secondary-foreground font-poppins font-bold text-lg">C</span>
               </div>
-              <span className="font-poppins font-semibold text-xl">Campuspreneurs</span>
+              <span className="font-poppins font-semibold text-xl">Incamp</span>
             </div>
             <p className="text-primary-foreground/80 text-sm leading-relaxed">
               Turning campus challenges into countable change through innovation and entrepreneurship.
@@ -66,10 +66,11 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="mt-12 pt-8 border-t border-primary-foreground/20">
           <p className="text-center text-primary-foreground/60 text-sm">
-            © {new Date().getFullYear()} Campuspreneurs – Chapter 1. Organized by Geenovate Foundation. All rights reserved.
+            © {new Date().getFullYear()} Incamp – Chapter 1. Organized by Geenovate Foundation. All rights reserved.
           </p>
         </div>
       </div>
     </footer>
   );
 }
+

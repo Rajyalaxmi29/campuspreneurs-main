@@ -17,7 +17,7 @@ export function CTASection() {
             Ready to Innovate?
           </h2>
           <p className="mt-4 text-primary-foreground/80 text-lg">
-            Join Campuspreneurs Chapter 1 and transform your ideas into impactful solutions.
+            Join Incamp Chapter 1 and transform your ideas into impactful solutions.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
@@ -45,3 +45,4 @@ export function CTASection() {
     </section>
   );
 }
+

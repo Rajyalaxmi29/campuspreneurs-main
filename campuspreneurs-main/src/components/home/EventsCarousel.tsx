@@ -115,7 +115,7 @@ export function EventsCarousel() {
             Upcoming Events
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Stay updated with the latest Campuspreneurs events, workshops, and important dates.
+            Stay updated with the latest Incamp events, workshops, and important dates.
           </p>
         </div>
 
@@ -220,3 +220,4 @@ export function EventsCarousel() {
     </section>
   );
 }
+

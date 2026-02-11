@@ -7,12 +7,12 @@ export function AboutSection() {
             About The Event
           </span>
           <h2 className="mt-3 text-3xl lg:text-4xl font-poppins font-bold text-foreground">
-            What is Campuspreneurs?
+            What is Incamp?
           </h2>
           
           <div className="mt-8 space-y-4 text-muted-foreground text-lg leading-relaxed">
             <p>
-              <strong className="text-foreground">Campuspreneurs</strong> is a student-driven innovation challenge designed to identify, analyse, and solve real-world problems within the campus ecosystem. We believe every challenge holds the seed of transformation.
+              <strong className="text-foreground">Incamp</strong> is a student-driven innovation challenge designed to identify, analyse, and solve real-world problems within the campus ecosystem. We believe every challenge holds the seed of transformation.
             </p>
             <p>
               Through our structured <strong className="text-secondary">5D Framework</strong> — Discover, Define, Design, Develop, and Deliver — participants journey from problem identification to prototype creation, gaining invaluable entrepreneurial skills along the way.
@@ -43,3 +43,4 @@ export function AboutSection() {
     </section>
   );
 }
+
