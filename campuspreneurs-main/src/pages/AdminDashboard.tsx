@@ -103,7 +103,7 @@ export default function AdminDashboard() {
 
     const themeStatsData = Object.entries(themeCountMap).map(([theme, count]) => ({
       theme,
-      count
+      count: count as number
     }));
 
     setProblemStats(problemStatsData);
@@ -400,22 +400,32 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleViewPPT = async (team: TeamRegistration) => {
+  const handleViewDocument = async (team: TeamRegistration) => {
     if (!team.document_url) return;
 
     try {
-      const { data } = supabase.storage
+      // Use authenticated download to get the file blob
+      const { data, error } = await supabase.storage
         .from("team-documents")
-        .getPublicUrl(team.document_url);
+        .download(team.document_url);
 
-      if (data?.publicUrl) {
-        // Use Office Online viewer for PPT files
-        const encodedUrl = encodeURIComponent(data.publicUrl);
-        const viewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodedUrl}&wdOrigin=BROWSELINK`;
-        window.open(viewerUrl, '_blank');
+      if (error) throw error;
+
+      if (data) {
+        // Create a blob URL for the downloaded file
+        const blob = new Blob([data], { type: data.type || 'application/octet-stream' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Open the blob URL in a new tab
+        window.open(blobUrl, '_blank');
+
+        // Clean up the blob URL after a delay to ensure the tab has loaded
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 1000);
       }
     } catch (error) {
-      console.error("Error viewing PPT:", error);
+      console.error("Error viewing document:", error);
     }
   };
 
@@ -761,9 +771,9 @@ export default function AdminDashboard() {
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          onClick={() => handleViewPPT(team)}
+                                          onClick={() => handleViewDocument(team)}
                                           className="h-8 w-8 p-0"
-                                          title="View PPT"
+                                          title="View Document"
                                         >
                                           <Eye className="h-4 w-4" />
                                         </Button>
