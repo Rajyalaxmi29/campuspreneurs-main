@@ -149,6 +149,28 @@ export default function Registration() {
         return;
       }
 
+      // Check if team name already exists (case insensitive)
+      const { data: teamExists, error: checkError } = await supabase
+        .rpc('check_team_name_exists', { team_name_input: formData.teamName.trim() });
+
+      if (checkError) {
+        toast({
+          title: "Error",
+          description: "Failed to check existing team names.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (teamExists) {
+        toast({
+          title: "Team Name Already Exists",
+          description: "A team with this name has already been registered. Please choose a different team name.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       let documentUrl = null;
 
       // Upload file if selected
@@ -180,7 +202,7 @@ export default function Registration() {
         .insert({
           user_id: user.id,
           team_name: formData.teamName,
-          problem_id: resolvedUuid,
+          problem_id: formData.problemId, // Use the problem_statement_id string
           member1_name: formData.member1Name,
           member1_roll: formData.member1Roll,
           member2_name: formData.member2Name || null,
