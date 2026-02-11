@@ -16,10 +16,14 @@ interface Event {
   description: string;
   event_date: string;
   location: string;
-  event_type: string;
-  mode: string;
+  event_type: string | null;
+  mode: string | null;
+  organizer_name: string | null;
+  organizer_contact: string | null;
+  registration_deadline: string | null;
+  max_participants: number | null;
   is_active: boolean;
-  image_url?: string;
+  image_url?: string | null;
 }
 
 interface EventFormDialogProps {
@@ -44,6 +48,10 @@ export function EventFormDialog({
     location: "",
     event_type: "",
     mode: "",
+    organizer_name: "",
+    organizer_contact: "",
+    registration_deadline: "",
+    max_participants: "",
     is_active: true,
     image_url: "",
   });
@@ -89,8 +97,15 @@ export function EventFormDialog({
         description: event.description,
         event_date: formatDateForInput(event.event_date),
         location: event.location,
-        event_type: event.event_type,
-        mode: event.mode,
+        event_type: event.event_type || "",
+        mode: event.mode || "",
+        organizer_name: event.organizer_name || "",
+        organizer_contact: event.organizer_contact || "",
+        registration_deadline: formatDateForInput(event.registration_deadline || ""),
+        max_participants:
+          event.max_participants === null || event.max_participants === undefined
+            ? ""
+            : String(event.max_participants),
         is_active: event.is_active,
         image_url: event.image_url || "",
       });
@@ -110,6 +125,10 @@ export function EventFormDialog({
         location: "",
         event_type: "",
         mode: "",
+        organizer_name: "",
+        organizer_contact: "",
+        registration_deadline: "",
+        max_participants: "",
         is_active: true,
         image_url: "",
       });
@@ -131,6 +150,14 @@ export function EventFormDialog({
     // Validate event date
     if (formData.event_date < minDate) {
       toast.error("Event date and time cannot be in the past. Please select a future date and time.");
+      return;
+    }
+    if (
+      formData.registration_deadline &&
+      formData.event_date &&
+      formData.registration_deadline > formData.event_date
+    ) {
+      toast.error("Registration deadline must be before event date and time.");
       return;
     }
 
@@ -157,7 +184,16 @@ export function EventFormDialog({
         imageUrl = urlData.publicUrl;
       }
 
-      await onSave({ ...formData, image_url: imageUrl });
+      await onSave({
+        ...formData,
+        image_url: imageUrl,
+        organizer_name: formData.organizer_name.trim() || null,
+        organizer_contact: formData.organizer_contact.trim() || null,
+        registration_deadline: formData.registration_deadline || null,
+        max_participants: formData.max_participants
+          ? Number(formData.max_participants)
+          : null,
+      });
     } catch (error: any) {
       console.error("Error uploading image:", error);
       toast.error(error.message || "Failed to upload image");
@@ -242,6 +278,45 @@ export function EventFormDialog({
                 <SelectItem value="Hybrid">Hybrid</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="organizer_name">Organizer Name</Label>
+            <Input
+              id="organizer_name"
+              value={formData.organizer_name}
+              onChange={(e) => setFormData({ ...formData, organizer_name: e.target.value })}
+              placeholder="Event organizer name"
+            />
+          </div>
+          <div>
+            <Label htmlFor="organizer_contact">Organizer Contact</Label>
+            <Input
+              id="organizer_contact"
+              value={formData.organizer_contact}
+              onChange={(e) => setFormData({ ...formData, organizer_contact: e.target.value })}
+              placeholder="Email or phone"
+            />
+          </div>
+          <div>
+            <Label htmlFor="registration_deadline">Registration Deadline</Label>
+            <Input
+              id="registration_deadline"
+              type="datetime-local"
+              value={formData.registration_deadline}
+              onChange={(e) => setFormData({ ...formData, registration_deadline: e.target.value })}
+              max={formData.event_date || undefined}
+            />
+          </div>
+          <div>
+            <Label htmlFor="max_participants">Max Participants</Label>
+            <Input
+              id="max_participants"
+              type="number"
+              min={1}
+              value={formData.max_participants}
+              onChange={(e) => setFormData({ ...formData, max_participants: e.target.value })}
+              placeholder="Leave empty for unlimited"
+            />
           </div>
           <div>
             <Label htmlFor="image">Event Image</Label>

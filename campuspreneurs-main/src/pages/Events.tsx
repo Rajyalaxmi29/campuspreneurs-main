@@ -16,10 +16,14 @@ interface Event {
   description: string;
   event_date: string;
   location: string;
-  event_type: string;
-  mode: string;
+  event_type: string | null;
+  mode: string | null;
+  organizer_name: string | null;
+  organizer_contact: string | null;
+  registration_deadline: string | null;
+  max_participants: number | null;
   is_active: boolean;
-  image_url?: string;
+  image_url?: string | null;
 }
 
 export default function EventsPage() {
@@ -194,12 +198,16 @@ export default function EventsPage() {
                 {/* Main Content */}
                 <div className="flex-1 space-y-2">
                   <div className="flex gap-2">
-                    <span className="text-xs bg-primary text-white px-2 py-1 rounded">
-                      {event.event_type}
-                    </span>
-                    <span className="text-xs bg-muted px-2 py-1 rounded">
-                      {event.mode}
-                    </span>
+                    {event.event_type && (
+                      <span className="text-xs bg-primary text-white px-2 py-1 rounded">
+                        {event.event_type}
+                      </span>
+                    )}
+                    {event.mode && (
+                      <span className="text-xs bg-muted px-2 py-1 rounded">
+                        {event.mode}
+                      </span>
+                    )}
                   </div>
 
                   <h2 className="text-xl font-semibold">{event.title}</h2>

@@ -9,16 +9,16 @@ import { Layout } from "@/components/layout/Layout";
 interface Event {
   id: string;
   title: string;
-  full_description: string;
+  description: string;
   event_date: string;
   location: string;
-  event_type: string;
-  mode: string;
-  registration_deadline: string;
-  max_participants: number;
-  organizer_name: string;
-  organizer_contact: string;
-  is_registration_open: boolean;
+  event_type: string | null;
+  mode: string | null;
+  registration_deadline: string | null;
+  max_participants: number | null;
+  organizer_name: string | null;
+  organizer_contact: string | null;
+  is_active: boolean;
 }
 
 export default function EventDetails() {
@@ -59,6 +59,11 @@ export default function EventDetails() {
   }
 
   const eventDate = new Date(event.event_date);
+  const registrationDeadlineDate = event.registration_deadline
+    ? new Date(event.registration_deadline)
+    : null;
+  const isRegistrationOpen =
+    event.is_active && (!registrationDeadlineDate || registrationDeadlineDate > new Date());
 
   return (
     <Layout>
@@ -69,17 +74,21 @@ export default function EventDetails() {
             <div>
               <h1 className="text-3xl font-bold mb-2">{event.title}</h1>
               <div className="flex gap-2">
-                <span className="text-xs bg-primary text-white px-2 py-1 rounded">
-                  {event.event_type}
-                </span>
-                <span className="text-xs bg-muted px-2 py-1 rounded">
-                  {event.mode}
-                </span>
+                {event.event_type && (
+                  <span className="text-xs bg-primary text-white px-2 py-1 rounded">
+                    {event.event_type}
+                  </span>
+                )}
+                {event.mode && (
+                  <span className="text-xs bg-muted px-2 py-1 rounded">
+                    {event.mode}
+                  </span>
+                )}
               </div>
             </div>
 
             <p className="text-muted-foreground whitespace-pre-line">
-              {event.full_description}
+              {event.description}
             </p>
 
             <div className="space-y-3 text-sm">
@@ -103,24 +112,26 @@ export default function EventDetails() {
             </div>
 
             <div className="border-t pt-4 text-sm space-y-1">
-              <p><strong>Organizer:</strong> {event.organizer_name}</p>
-              <p><strong>Contact:</strong> {event.organizer_contact}</p>
+              <p><strong>Organizer:</strong> {event.organizer_name || "TBA"}</p>
+              <p><strong>Contact:</strong> {event.organizer_contact || "TBA"}</p>
               <p>
                 <strong>Registration Deadline:</strong>{" "}
-                {new Date(event.registration_deadline).toLocaleDateString("en-IN")}
+                {registrationDeadlineDate
+                  ? registrationDeadlineDate.toLocaleDateString("en-IN")
+                  : "Not set"}
               </p>
               <p>
-                <strong>Max Participants:</strong> {event.max_participants}
+                <strong>Max Participants:</strong> {event.max_participants ?? "Unlimited"}
               </p>
             </div>
 
             <Button
               className="w-full"
-              disabled={!event.is_registration_open}
+              disabled={!isRegistrationOpen}
               variant="orange"
               onClick={() => navigate(`/events/${id}/register`)}
             >
-              {event.is_registration_open
+              {isRegistrationOpen
                 ? "Register for Event"
                 : "Registration Closed"}
             </Button>
