@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,19 @@ import { z } from "zod";
 import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
 
 const DEPARTMENT_ADMIN_URL = "https://depart-admin-portal.vercel.app/dashboard";
+
+const buildDepartmentAdminRedirectUrl = (session: Session) => {
+  const hashParams = new URLSearchParams({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    token_type: session.token_type ?? "bearer",
+    expires_at: String(session.expires_at ?? ""),
+    provider_token: "",
+    provider_refresh_token: "",
+  });
+
+  return `${DEPARTMENT_ADMIN_URL}#${hashParams.toString()}`;
+};
 
 // Email validation function for GCET domain
 const validateGcetEmail = (email: string) => {
@@ -53,11 +67,15 @@ export default function Auth() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const { user, signIn, signUp } = useAuth();
+  const { user, session, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const routeUserAfterLogin = useCallback(async (userId: string, fallbackUrl: string) => {
+  const routeUserAfterLogin = useCallback(async (
+    userId: string,
+    fallbackUrl: string,
+    sessionOverride?: Session | null
+  ) => {
     const { data: roleRows, error: roleError } = await supabase
       .from("user_roles")
       .select("role")
@@ -74,12 +92,23 @@ export default function Auth() {
     );
 
     if (isDeptAdmin) {
-      window.location.replace(DEPARTMENT_ADMIN_URL);
+      let activeSession = sessionOverride ?? session;
+      if (!activeSession) {
+        const { data } = await supabase.auth.getSession();
+        activeSession = data.session;
+      }
+
+      if (activeSession?.access_token && activeSession?.refresh_token) {
+        window.location.replace(buildDepartmentAdminRedirectUrl(activeSession));
+      } else {
+        window.location.replace(DEPARTMENT_ADMIN_URL);
+      }
+
       return;
     }
 
     navigate(fallbackUrl, { replace: true });
-  }, [navigate]);
+  }, [navigate, session]);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -141,8 +170,12 @@ export default function Auth() {
           }
           setIsPostLoginRouting(false);
         } else {
-          const { data: authUserData } = await supabase.auth.getUser();
+          const [{ data: authUserData }, { data: sessionData }] = await Promise.all([
+            supabase.auth.getUser(),
+            supabase.auth.getSession(),
+          ]);
           const signedInUser = authUserData.user;
+          const signedInSession = sessionData.session;
 
           toast({
             title: "Welcome back!",
@@ -156,7 +189,7 @@ export default function Auth() {
 
           const redirectUrl = localStorage.getItem("redirectAfterLogin") || "/";
           localStorage.removeItem("redirectAfterLogin");
-          await routeUserAfterLogin(signedInUser.id, redirectUrl);
+          await routeUserAfterLogin(signedInUser.id, redirectUrl, signedInSession);
         }
       } else {
         // Validate signup

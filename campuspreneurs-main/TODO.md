@@ -1,12 +1,13 @@
-# TODO: Implement Automatic Background Image Slider for Homepage Hero Section
+# TODO - Fix deptadmin redirect and auto-login
 
-## Tasks
-- [x] Modify `src/components/home/HeroSection.tsx` to add background image slider
-- [x] Add React hooks (useState, useEffect) for slider state and interval
-- [x] Implement fade transitions between images every 4 seconds
-- [x] Convert solid blue background to semi-transparent overlay
-- [x] Ensure proper z-index layering (slider bottom, overlay middle, content top)
-- [x] Maintain responsiveness and prevent layout shifts
-- [x] Test slider functionality and text readability
-- [x] Adjust overlay opacity for optimal visibility
-- [x] Fix CSS @import order warning
+## Task Overview
+After redirection to deptadmin portal, users see login page instead of dashboard. Need to:
+1. Improve Auth.tsx with better UX (loading indicator when redirecting)
+2. Provide instructions for department portal website code changes
+
+## Steps:
+1. [x] Read and understand current Auth.tsx implementation
+2. [x] Read AuthContext.tsx 
+3. [x] Read Supabase client configuration
+4. [ ] Improve Auth.tsx with better redirect UX
+5. [ ] Create instructions for department portal website code changes
