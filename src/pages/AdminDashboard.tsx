@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Layout } from "@/components/layout/Layout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Users, FileText, Shield, TrendingUp, Edit, Trash2, Eye, Download, Calendar } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -485,7 +485,7 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <Layout>
+    <AdminLayout>
       {/* Header */}
       <section className="bg-primary py-16 lg:py-24">
         <div className="container mx-auto px-4 text-center">
@@ -890,7 +890,7 @@ export default function AdminDashboard() {
           )}
         </div>
       </section>
-    </Layout>
+    </AdminLayout>
   );
 }
 
