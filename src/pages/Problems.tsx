@@ -44,6 +44,7 @@ interface ProblemStatement {
   theme: string | null;
   department: string | null;
   created_at: string;
+  approved_at?: string;
 }
 
 export default function Problems() {
@@ -71,6 +72,7 @@ export default function Problems() {
     const { data, error: fetchError } = await supabase
       .from("problem_statements")
       .select("*")
+      .not("approved_at", "is", null)
       .order("problem_statement_id", { ascending: true });
 
     console.log("Fetched data:", data);
@@ -94,27 +96,68 @@ export default function Problems() {
   const handleSave = async (data: Omit<ProblemStatement, "id" | "created_at">) => {
     setSaving(true);
     try {
+      let department_id = null;
+      if (data.department) {
+        const { data: deptData, error: deptError } = await supabase
+          .from("departments")
+          .select("id")
+          .eq("name", data.department)
+          .single();
+
+        if (deptError) throw new Error(`Could not find department: ${data.department}`);
+        department_id = deptData.id;
+      }
+
+      const {
+        problem_statement_id,
+        title,
+        description,
+        detailed_description,
+        category,
+        theme,
+      } = data;
+
+      const problemDataForSave = {
+        problem_statement_id,
+        title,
+        description,
+        detailed_description,
+        category,
+        theme,
+        department_id: department_id,
+      };
+
       if (selectedProblem) {
         // Update existing
         const { error } = await supabase
           .from("problem_statements")
-          .update(data)
+          .update(problemDataForSave)
           .eq("id", selectedProblem.id);
         if (error) throw error;
         toast.success("Problem statement updated");
       } else {
         // Create new
+        const now = new Date().toISOString();
+        const { data: authData } = await supabase.auth.getUser();
         const { error } = await supabase
           .from("problem_statements")
-          .insert([data]);
+          .insert([
+            {
+              ...problemDataForSave,
+              status: "approved",
+              created_by: authData.user?.id,
+              submitted_at: now,
+              approved_at: now,
+            },
+          ]);
         if (error) throw error;
-        toast.success("Problem statement created");
+        toast.success("Problem statement created and approved!");
       }
       setFormOpen(false);
       setSelectedProblem(null);
       fetchProblems();
     } catch (err: any) {
-      toast.error(err.message || "Failed to save");
+      toast.error(err.message || "Failed to save problem statement.");
     } finally {
       setSaving(false);
     }

@@ -7,6 +7,7 @@ import { Edit, Check, X, ArrowRight, Trash2 } from "lucide-react";
 import { useAdmin } from "@/hooks/useAdmin";
 import { ProblemFormDialog } from "@/components/admin/ProblemFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 interface ProblemRow {
@@ -14,11 +15,13 @@ interface ProblemRow {
   problem_statement_id: string;
   title: string;
   description: string;
+  detailed_description?: string;
   category?: string;
   department?: string;
   theme?: string;
   status?: string;
   created_at?: string;
+  approved_at?: string;
 }
 
 export default function DepartmentsPage() {
@@ -31,11 +34,13 @@ export default function DepartmentsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<ProblemRow | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsProblem, setDetailsProblem] = useState<ProblemRow | null>(null);
 
   const fetch = async () => {
     setLoading(true);
     const [{ data: problemsData, error: problemsError }, { data: regsData, error: regsError }] = await Promise.all([
-      supabase.from("problem_statements").select("*").order("created_at", { ascending: false }),
+      supabase.from("problem_statements").select("*").eq("status", "pending_review").order("created_at", { ascending: false }),
       supabase.from("team_registrations").select("department"),
     ]);
 
@@ -117,11 +122,22 @@ export default function DepartmentsPage() {
 
   const handleStatus = async (id: string, status: string) => {
     try {
-      const { error } = await supabase.from("problem_statements").update({ status }).eq("id", id);
+      const updateData: { status: string; approved_at?: string | null } = { status };
+      if (status === 'approved') {
+        updateData.approved_at = new Date().toISOString();
+      } else if (status === 'revision_needed') {
+        updateData.approved_at = null;
+      }
+      const { error } = await supabase.from("problem_statements").update(updateData).eq("id", id);
       if (error) throw error;
       toast.success("Status updated");
       fetch();
     } catch (err: any) { toast.error(err.message || "Failed"); }
+  };
+
+  const openModal = (problem: ProblemRow) => {
+    setDetailsProblem(problem);
+    setDetailsOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -200,13 +216,13 @@ export default function DepartmentsPage() {
                                             <Button variant="outline" size="icon" onClick={() => { setSelected(p); setDeleteOpen(true); }} title="Delete"><Trash2 className="w-4 h-4"/></Button>
                                           </div>
                                           <div className="flex gap-2">
-                                            <Button size="sm" variant="success" onClick={() => handleStatus(p.id, 'accepted')}><Check className="w-4 h-4 mr-1"/>Accept</Button>
-                                            <Button size="sm" variant="destructive" onClick={() => handleStatus(p.id, 'rejected')}><X className="w-4 h-4 mr-1"/>Reject</Button>
+                                            <Button size="sm" variant="success" onClick={() => handleStatus(p.id, 'approved')}><Check className="w-4 h-4 mr-1"/>Accept</Button>
+                                            <Button size="sm" variant="destructive" onClick={() => handleStatus(p.id, 'revision_needed')}><X className="w-4 h-4 mr-1"/>Reject</Button>
                                           </div>
                                         </>
                                       )}
-                                      <Button size="sm" variant="orange" asChild>
-                                        <Link to={`/problems/${p.problem_statement_id}`}>View Details<ArrowRight className="w-4 h-4 ml-1"/></Link>
+                                      <Button size="sm" variant="orange" onClick={() => openModal(p)}>
+                                        View Details<ArrowRight className="w-4 h-4 ml-1"/>
                                       </Button>
                                     </div>
                                   </div>
@@ -226,6 +242,101 @@ export default function DepartmentsPage() {
 
         <ProblemFormDialog open={formOpen} onOpenChange={setFormOpen} problem={selected} onSave={handleSave} loading={loading} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={confirmDelete} title="Delete Problem" description={`Delete "${selected?.title}"?`} />
+        
+        {/* Problem Details Modal */}
+        <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            {detailsProblem && (
+              <>
+                {/* Header */}
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold">
+                    Problem Statement Details
+                  </DialogTitle>
+                </DialogHeader>
+
+                {/* Table */}
+                <div className="mt-6 border border-border rounded-xl overflow-hidden">
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      {/* ID */}
+                      <tr className="border-b">
+                        <td className="w-1/3 bg-muted px-4 py-3 font-medium">
+                          Problem Statement ID
+                        </td>
+                        <td className="px-4 py-3 font-semibold">
+                          {detailsProblem.problem_statement_id}
+                        </td>
+                      </tr>
+
+                      {/* Title */}
+                      <tr className="border-b">
+                        <td className="bg-muted px-4 py-3 font-medium">
+                          Problem Statement Title
+                        </td>
+                        <td className="px-4 py-3">
+                          {detailsProblem.title}
+                        </td>
+                      </tr>
+
+                      {/* Description */}
+                      <tr className="border-b align-top">
+                        <td className="bg-muted px-4 py-3 font-medium">
+                          Description
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground whitespace-pre-line">
+                          {detailsProblem.description}
+                        </td>
+                      </tr>
+
+                      {/* Detailed Description */}
+                      {detailsProblem.detailed_description && (
+                        <tr className="border-b align-top">
+                          <td className="bg-muted px-4 py-3 font-medium">
+                            Detailed Description
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground whitespace-pre-line">
+                            {detailsProblem.detailed_description}
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* Category */}
+                      <tr className="border-b">
+                        <td className="bg-muted px-4 py-3 font-medium">
+                          Category
+                        </td>
+                        <td className="px-4 py-3">
+                          {detailsProblem.category}
+                        </td>
+                      </tr>
+
+                      {/* Theme */}
+                      <tr className="border-b">
+                        <td className="bg-muted px-4 py-3 font-medium">
+                          Theme
+                        </td>
+                        <td className="px-4 py-3">
+                          {detailsProblem.theme}
+                        </td>
+                      </tr>
+
+                      {/* Department */}
+                      <tr className="border-b">
+                        <td className="bg-muted px-4 py-3 font-medium">
+                          Department
+                        </td>
+                        <td className="px-4 py-3">
+                          {detailsProblem.department || "Not specified"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

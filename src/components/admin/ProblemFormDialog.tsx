@@ -4,7 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface Department {
+  id: string;
+  name: string;
+}
+
 
 interface ProblemStatement {
   id: string;
@@ -40,6 +47,20 @@ export function ProblemFormDialog({
     theme: "",
     department: "",
   });
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      const { data, error } = await supabase.from("departments").select("id, name");
+      if (error) {
+        console.error("Error fetching departments:", error);
+      } else {
+        setDepartments(data);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
 
   useEffect(() => {
     if (problem) {
@@ -162,13 +183,11 @@ export function ProblemFormDialog({
                 <SelectValue placeholder="Select department" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Computer Science">Computer Science</SelectItem>
-                <SelectItem value="Information Technology">Information Technology</SelectItem>
-                <SelectItem value="Electronics">Electronics</SelectItem>
-                <SelectItem value="Mechanical">Mechanical</SelectItem>
-                <SelectItem value="Civil">Civil</SelectItem>
-                <SelectItem value="Electrical">Electrical</SelectItem>
-                <SelectItem value="Business Administration">Business Administration</SelectItem>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.name}>
+                    {dept.name}
+                  </SelectItem>
+                ))}
                 <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
