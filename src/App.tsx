@@ -19,6 +19,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import EventDetails from "./pages/EventDetails";
 import EventRegister from "./pages/EventRegister";
+import ProblemStatementChatPage from "./pages/ProblemStatementChatPage";
 import ScrollToTop from "./components/ScrollToTop";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/problems" element={<Problems />} />
             <Route path="/problems/:id" element={<ProblemDetails />} />
+            <Route path="/problem-statements-chat" element={<ProblemStatementChatPage />} />
             <Route path="/events" element={<Events />} />
             <Route path="/events/:id/register" element={<EventRegister />} />
             <Route path="/events/:id" element={<EventDetails />} />

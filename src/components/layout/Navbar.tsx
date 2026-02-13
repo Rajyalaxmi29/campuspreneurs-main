@@ -21,6 +21,7 @@ export function Navbar() {
       ? [
           { name: "Dashboard", path: "/admin" },
           { name: "Departments", path: "/departments" },
+          { name: "Chat", path: "/problem-statements-chat" },
         ]
       : [{ name: "Registration", path: "/registration" }]),
     { name: "Contact", path: "/contact" },
