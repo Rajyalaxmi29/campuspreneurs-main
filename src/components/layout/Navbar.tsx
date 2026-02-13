@@ -17,9 +17,12 @@ export function Navbar() {
     { name: "Events", path: "/events" },
     { name: "Problem Statements", path: "/problems" },
     { name: "Resources", path: "/resources" },
-    isAdmin
-      ? { name: "Dashboard", path: "/admin" }
-      : { name: "Registration", path: "/registration" },
+    ...(isAdmin
+      ? [
+          { name: "Dashboard", path: "/admin" },
+          { name: "Departments", path: "/departments" },
+        ]
+      : [{ name: "Registration", path: "/registration" }]),
     { name: "Contact", path: "/contact" },
   ];
 
@@ -158,4 +161,3 @@ export function Navbar() {
     </header>
   );
 }
-
