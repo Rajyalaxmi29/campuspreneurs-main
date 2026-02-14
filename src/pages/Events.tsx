@@ -168,7 +168,8 @@ export default function EventsPage() {
             <Button
               onClick={openCreateDialog}
               className="mt-6"
-              variant="heroOutline"
+              variant="orange"
+              size="sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Event

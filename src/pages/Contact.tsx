@@ -142,17 +142,17 @@ export default function Contact() {
             <div className="mt-6 flex justify-center gap-2">
               {editing ? (
                 <>
-                  <Button onClick={handleSave} disabled={saving} variant="heroOutline">
+                  <Button onClick={handleSave} disabled={saving} variant="orange" size="sm">
                     <Save className="w-4 h-4 mr-2" />
                     {saving ? "Saving..." : "Save Changes"}
                   </Button>
-                  <Button onClick={handleCancel} variant="ghost" className="text-primary-foreground">
+                  <Button onClick={handleCancel} variant="orange" size="sm">
                     <X className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
                 </>
               ) : (
-                <Button onClick={() => setEditing(true)} variant="heroOutline">
+                <Button onClick={() => setEditing(true)} variant="orange" size="sm">
                   <Edit className="w-4 h-4 mr-2" />
                   Edit Content
                 </Button>
