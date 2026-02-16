@@ -136,8 +136,34 @@ export default function Problems() {
         if (error) throw error;
         toast.success("Problem statement updated");
       } else {
-        // Create new
+        // Create new — but first ensure there's an active event accepting problem statements
         const now = new Date().toISOString();
+        try {
+          const { data: events, error: evError } = await supabase
+            .from("events")
+            .select("id")
+            .gt("problem_statement_deadline", now)
+            .limit(1);
+
+          if (evError) {
+            console.error("Error checking event deadlines:", evError);
+            toast.error("Unable to verify problem statement deadline. Try again later.");
+            setSaving(false);
+            return;
+          }
+
+          if (!events || events.length === 0) {
+            toast.error("Problem statements are closed — no active deadline available.");
+            setSaving(false);
+            return;
+          }
+        } catch (err) {
+          console.error("Unexpected error checking deadlines:", err);
+          toast.error("Unable to verify problem statement deadline. Try again later.");
+          setSaving(false);
+          return;
+        }
+
         const { data: authData } = await supabase.auth.getUser();
         const { error } = await supabase
           .from("problem_statements")

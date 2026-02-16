@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Department {
@@ -88,6 +89,35 @@ export function ProblemFormDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // If creating a new problem (not editing), ensure there's at least
+    // one event accepting problem statements (deadline in future).
+    if (!problem) {
+      try {
+        const now = new Date().toISOString();
+        const { data: events, error } = await supabase
+          .from("events")
+          .select("id")
+          .gt("problem_statement_deadline", now)
+          .limit(1);
+
+        if (error) {
+          console.error("Error checking event deadlines:", error);
+          toast.error("Unable to verify problem statement deadline. Try again later.");
+          return;
+        }
+
+        if (!events || events.length === 0) {
+          toast.error("Problem statements are closed — no active deadline available.");
+          return;
+        }
+      } catch (err) {
+        console.error("Unexpected error checking deadlines:", err);
+        toast.error("Unable to verify problem statement deadline. Try again later.");
+        return;
+      }
+    }
+
     await onSave(formData);
   };
 

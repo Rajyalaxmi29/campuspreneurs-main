@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin } from "lucide-react";
 import { Layout } from "@/components/layout/Layout";
+import { useAdmin } from "@/hooks/useAdmin";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Event {
   id: string;
@@ -14,6 +16,8 @@ interface Event {
   location: string;
   event_type: string | null;
   mode: string | null;
+  resource_person: string | null;
+  problem_statement_deadline: string | null;
   registration_deadline: string | null;
   max_participants: number | null;
   organizer_name: string | null;
@@ -24,12 +28,18 @@ interface Event {
 export default function EventDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
+  const { user } = useAuth();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
 
   useEffect(() => {
     fetchEvent();
-  }, [id]);
+    if (user && id) {
+      checkRegistration();
+    }
+  }, [id, user]);
 
   const fetchEvent = async () => {
     const { data, error } = await supabase
@@ -40,6 +50,24 @@ export default function EventDetails() {
 
     if (!error) setEvent(data);
     setLoading(false);
+  };
+
+  const checkRegistration = async () => {
+    if (!user) return;
+    
+    try {
+      const { data } = await supabase
+        .from("event_registrations")
+        .select("id")
+        .eq("event_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      setAlreadyRegistered(!!data);
+    } catch (err) {
+      console.error("Error checking registration:", err);
+      setAlreadyRegistered(false);
+    }
   };
 
   if (loading) {
@@ -64,6 +92,10 @@ export default function EventDetails() {
     : null;
   const isRegistrationOpen =
     event.is_active && (!registrationDeadlineDate || registrationDeadlineDate > new Date());
+
+  const handleRegisterClick = () => {
+    navigate(`/events/${id}/register`);
+  };
 
   return (
     <Layout>
@@ -114,6 +146,9 @@ export default function EventDetails() {
             <div className="border-t pt-4 text-sm space-y-1">
               <p><strong>Organizer:</strong> {event.organizer_name || "TBA"}</p>
               <p><strong>Contact:</strong> {event.organizer_contact || "TBA"}</p>
+              {event.resource_person && (
+                <p><strong>Resource Person:</strong> {event.resource_person}</p>
+              )}
               <p>
                 <strong>Registration Deadline:</strong>{" "}
                 {registrationDeadlineDate
@@ -125,16 +160,23 @@ export default function EventDetails() {
               </p>
             </div>
 
-            <Button
-              className="w-full"
-              disabled={!isRegistrationOpen}
-              variant="orange"
-              onClick={() => navigate(`/events/${id}/register`)}
-            >
-              {isRegistrationOpen
-                ? "Register for Event"
-                : "Registration Closed"}
-            </Button>
+            {!isAdmin && (
+              <>
+                {alreadyRegistered ? (
+                  <div className="w-full bg-green-100 text-green-800 px-4 py-2 rounded text-center font-medium">
+                    ✓ Already Registered for this Event
+                  </div>
+                ) : (
+                  <Button
+                    className="w-full"
+                    variant="orange"
+                    onClick={handleRegisterClick}
+                  >
+                    Register for Event
+                  </Button>
+                )}
+              </>
+            )}
 
           </CardContent>
         </Card>

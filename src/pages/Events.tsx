@@ -8,6 +8,7 @@ import { Layout } from "@/components/layout/Layout";
 import { useAdmin } from "@/hooks/useAdmin";
 import { EventFormDialog } from "@/components/admin/EventFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { EventsCarousel } from "@/components/home/EventsCarousel";
 import { toast } from "sonner";
 
 interface Event {
@@ -20,6 +21,8 @@ interface Event {
   mode: string | null;
   organizer_name: string | null;
   organizer_contact: string | null;
+  resource_person: string | null;
+  problem_statement_deadline: string | null;
   registration_deadline: string | null;
   max_participants: number | null;
   is_active: boolean;
@@ -178,6 +181,9 @@ export default function EventsPage() {
         </div>
       </section>
 
+      {/* Hot New Events Carousel */}
+      <EventsCarousel />
+
       {/* Events List */}
       <section className="py-12 lg:py-16 bg-background">
         <div className="container mx-auto px-4">
@@ -220,6 +226,12 @@ export default function EventsPage() {
                     <MapPin className="w-4 h-4" />
                     {event.location}
                   </div>
+
+                  {event.resource_person && (
+                    <div className="text-sm">
+                      <span className="font-medium">Resource Person:</span> {event.resource_person}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

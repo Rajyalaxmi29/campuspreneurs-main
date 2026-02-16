@@ -20,6 +20,8 @@ interface Event {
   mode: string | null;
   organizer_name: string | null;
   organizer_contact: string | null;
+  resource_person: string | null;
+  problem_statement_deadline: string | null;
   registration_deadline: string | null;
   max_participants: number | null;
   is_active: boolean;
@@ -50,6 +52,8 @@ export function EventFormDialog({
     mode: "",
     organizer_name: "",
     organizer_contact: "",
+    resource_person: "",
+    problem_statement_deadline: "",
     registration_deadline: "",
     max_participants: "",
     is_active: true,
@@ -58,6 +62,7 @@ export function EventFormDialog({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [minDate, setMinDate] = useState<string>("");
+  const [hasProblemStatements, setHasProblemStatements] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatDateForInput = (dateString: string) => {
@@ -101,6 +106,8 @@ export function EventFormDialog({
         mode: event.mode || "",
         organizer_name: event.organizer_name || "",
         organizer_contact: event.organizer_contact || "",
+        resource_person: event.resource_person || "",
+        problem_statement_deadline: formatDateForInput(event.problem_statement_deadline || ""),
         registration_deadline: formatDateForInput(event.registration_deadline || ""),
         max_participants:
           event.max_participants === null || event.max_participants === undefined
@@ -109,6 +116,9 @@ export function EventFormDialog({
         is_active: event.is_active,
         image_url: event.image_url || "",
       });
+      
+      // If event has problem_statement_deadline, enable problem statements
+      setHasProblemStatements(!!event.problem_statement_deadline);
     } else {
       // For adding new events, set min date to now
       const year = now.getFullYear();
@@ -127,11 +137,15 @@ export function EventFormDialog({
         mode: "",
         organizer_name: "",
         organizer_contact: "",
+        resource_person: "",
+        problem_statement_deadline: "",
         registration_deadline: "",
         max_participants: "",
         is_active: true,
         image_url: "",
       });
+      
+      setHasProblemStatements(true);
     }
 
     setMinDate(minDateValue);
@@ -189,6 +203,8 @@ export function EventFormDialog({
         image_url: imageUrl,
         organizer_name: formData.organizer_name.trim() || null,
         organizer_contact: formData.organizer_contact.trim() || null,
+        resource_person: formData.resource_person.trim() || null,
+        problem_statement_deadline: formData.problem_statement_deadline || null,
         registration_deadline: formData.registration_deadline || null,
         max_participants: formData.max_participants
           ? Number(formData.max_participants)
@@ -232,6 +248,54 @@ export function EventFormDialog({
               required
             />
           </div>
+
+          {/* Problem Statements Toggle */}
+          <div className="border rounded-lg p-4 bg-muted/50">
+            <div className="flex items-center space-x-2 mb-3">
+              <Checkbox
+                id="hasProblemStatements"
+                checked={hasProblemStatements}
+                onCheckedChange={(checked) => {
+                  setHasProblemStatements(checked as boolean);
+                  // Clear problem statement deadline if unchecked
+                  if (!checked) {
+                    setFormData({ ...formData, problem_statement_deadline: "" });
+                  }
+                }}
+              />
+              <Label htmlFor="hasProblemStatements" className="font-medium cursor-pointer">
+                Include Problem Statements in this Event
+              </Label>
+            </div>
+            
+            {/* Problem Statement Deadline - Only show if hasProblemStatements is true */}
+            {hasProblemStatements && (
+              <div>
+                <Label htmlFor="problem_statement_deadline">Problem Statement Deadline</Label>
+                <Input
+                  id="problem_statement_deadline"
+                  type="datetime-local"
+                  value={formData.problem_statement_deadline}
+                  onChange={(e) => setFormData({ ...formData, problem_statement_deadline: e.target.value })}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Registration Fields */}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="registration_deadline">Registration Ending Date</Label>
+              <Input
+                id="registration_deadline"
+                type="datetime-local"
+                value={formData.registration_deadline}
+                onChange={(e) => setFormData({ ...formData, registration_deadline: e.target.value })}
+                max={formData.event_date || undefined}
+              />
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="event_date">Event Date & Time</Label>
             <Input
@@ -298,13 +362,12 @@ export function EventFormDialog({
             />
           </div>
           <div>
-            <Label htmlFor="registration_deadline">Registration Deadline</Label>
+            <Label htmlFor="resource_person">Resource Person (Optional)</Label>
             <Input
-              id="registration_deadline"
-              type="datetime-local"
-              value={formData.registration_deadline}
-              onChange={(e) => setFormData({ ...formData, registration_deadline: e.target.value })}
-              max={formData.event_date || undefined}
+              id="resource_person"
+              value={formData.resource_person}
+              onChange={(e) => setFormData({ ...formData, resource_person: e.target.value })}
+              placeholder="Name of resource person or expert"
             />
           </div>
           <div>

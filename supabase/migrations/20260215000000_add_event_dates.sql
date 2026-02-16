@@ -1,0 +1,13 @@
+-- Add new and missing columns to events table
+ALTER TABLE public.events 
+ADD COLUMN IF NOT EXISTS event_type TEXT,
+ADD COLUMN IF NOT EXISTS mode TEXT,
+ADD COLUMN IF NOT EXISTS organizer_name TEXT,
+ADD COLUMN IF NOT EXISTS organizer_contact TEXT,
+ADD COLUMN IF NOT EXISTS registration_deadline TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS registration_start_date TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS problem_statement_deadline TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS max_participants INTEGER,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS image_url TEXT;
+
