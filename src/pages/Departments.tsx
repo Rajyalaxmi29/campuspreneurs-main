@@ -36,6 +36,9 @@ export default function DepartmentsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsProblem, setDetailsProblem] = useState<ProblemRow | null>(null);
+  const [actionOpen, setActionOpen] = useState(false);
+  const [actionProblem, setActionProblem] = useState<ProblemRow | null>(null);
+  const [remarkText, setRemarkText] = useState("");
 
   const fetch = async () => {
     setLoading(true);
@@ -217,7 +220,7 @@ export default function DepartmentsPage() {
                                           </div>
                                           <div className="flex gap-2">
                                             <Button size="sm" variant="success" onClick={() => handleStatus(p.id, 'approved')}><Check className="w-4 h-4 mr-1"/>Accept</Button>
-                                            <Button size="sm" variant="destructive" onClick={() => handleStatus(p.id, 'revision_needed')}><X className="w-4 h-4 mr-1"/>Reject</Button>
+                                            <Button size="sm" variant="destructive" onClick={() => { setActionProblem(p); setRemarkText(""); setActionOpen(true); }}><X className="w-4 h-4 mr-1"/>Reject</Button>
                                           </div>
                                         </>
                                       )}
@@ -335,6 +338,82 @@ export default function DepartmentsPage() {
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Combined action dialog: Revision needed or Remark */}
+        <Dialog open={actionOpen} onOpenChange={setActionOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Reject / Remark</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4 mt-4">
+              <p className="text-sm text-muted-foreground">Choose an action for the selected problem statement.</p>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!actionProblem) return;
+                    await handleStatus(actionProblem.id, 'revision_needed');
+                    setActionOpen(false);
+                    setActionProblem(null);
+                  }}
+                >
+                  Mark as Revision Needed
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // show remark textarea below
+                    setRemarkText("");
+                  }}
+                >
+                  Write Remark
+                </Button>
+              </div>
+
+              {/* Remark area */}
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground">Remark</label>
+                <textarea
+                  value={remarkText}
+                  onChange={(e) => setRemarkText(e.target.value)}
+                  className="w-full mt-2 p-2 border rounded-md"
+                  rows={4}
+                  placeholder="Write an optional remark to the team..."
+                />
+
+                <div className="flex justify-end mt-2">
+                  <Button
+                    variant="orange"
+                    onClick={async () => {
+                      if (!actionProblem) return;
+                      try {
+                        // try to save remark to problem_statements.admin_remark (DB column must exist)
+                        const { error } = await supabase
+                          .from('problem_statements')
+                          .update({ admin_remark: remarkText })
+                          .eq('id', actionProblem.id);
+                        if (error) throw error;
+                        toast.success('Remark saved');
+                        setActionOpen(false);
+                        setActionProblem(null);
+                        setRemarkText('');
+                        fetch();
+                      } catch (err: any) {
+                        console.error(err);
+                        toast.error(err.message || 'Failed to save remark. Ensure admin_remark column exists in DB.');
+                      }
+                    }}
+                  >
+                    Save Remark
+                  </Button>
+                </div>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

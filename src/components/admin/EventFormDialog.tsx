@@ -22,6 +22,7 @@ interface Event {
   organizer_contact: string | null;
   resource_person: string | null;
   problem_statement_deadline: string | null;
+  registration_start_date: string | null;
   registration_deadline: string | null;
   max_participants: number | null;
   is_active: boolean;
@@ -54,6 +55,7 @@ export function EventFormDialog({
     organizer_contact: "",
     resource_person: "",
     problem_statement_deadline: "",
+    registration_start_date: "",
     registration_deadline: "",
     max_participants: "",
     is_active: true,
@@ -108,6 +110,7 @@ export function EventFormDialog({
         organizer_contact: event.organizer_contact || "",
         resource_person: event.resource_person || "",
         problem_statement_deadline: formatDateForInput(event.problem_statement_deadline || ""),
+        registration_start_date: formatDateForInput(event.registration_start_date || ""),
         registration_deadline: formatDateForInput(event.registration_deadline || ""),
         max_participants:
           event.max_participants === null || event.max_participants === undefined
@@ -139,6 +142,7 @@ export function EventFormDialog({
         organizer_contact: "",
         resource_person: "",
         problem_statement_deadline: "",
+        registration_start_date: "",
         registration_deadline: "",
         max_participants: "",
         is_active: true,
@@ -205,6 +209,7 @@ export function EventFormDialog({
         organizer_contact: formData.organizer_contact.trim() || null,
         resource_person: formData.resource_person.trim() || null,
         problem_statement_deadline: formData.problem_statement_deadline || null,
+        registration_start_date: formData.registration_start_date || null,
         registration_deadline: formData.registration_deadline || null,
         max_participants: formData.max_participants
           ? Number(formData.max_participants)
@@ -284,6 +289,15 @@ export function EventFormDialog({
 
           {/* Registration Fields */}
           <div className="space-y-4">
+            <div>
+              <Label htmlFor="registration_start_date">Registration Starting Date</Label>
+              <Input
+                id="registration_start_date"
+                type="datetime-local"
+                value={formData.registration_start_date}
+                onChange={(e) => setFormData({ ...formData, registration_start_date: e.target.value })}
+              />
+            </div>
             <div>
               <Label htmlFor="registration_deadline">Registration Ending Date</Label>
               <Input

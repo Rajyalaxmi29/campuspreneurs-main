@@ -55,6 +55,10 @@ export default function Problems() {
   const [error, setError] = useState<string | null>(null);
   const { isAdmin } = useAdmin();
 
+  // Access control state
+  const [isAccessible, setIsAccessible] = useState(true);
+  const [earliestStartDate, setEarliestStartDate] = useState<string | null>(null);
+
   // Admin state
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -68,6 +72,31 @@ export default function Problems() {
   const fetchProblems = async () => {
     setLoading(true);
     setError(null);
+
+    // Fetch earliest event's registration_start_date
+    const { data: eventsData, error: eventsError } = await supabase
+      .from("events")
+      .select("registration_start_date")
+      .not("registration_start_date", "is", null)
+      .order("registration_start_date", { ascending: true })
+      .limit(1);
+
+    if (!eventsError && eventsData && eventsData.length > 0) {
+      const startDate = eventsData[0].registration_start_date;
+      setEarliestStartDate(startDate);
+
+      // Check if current date is before the start date
+      const now = new Date();
+      const eventStartDate = new Date(startDate);
+      const isAvailable = now >= eventStartDate;
+      setIsAccessible(isAvailable);
+
+      // If not accessible, don't fetch problems
+      if (!isAvailable) {
+        setLoading(false);
+        return;
+      }
+    }
 
     const { data, error: fetchError } = await supabase
       .from("problem_statements")
@@ -214,6 +243,18 @@ export default function Problems() {
     setFormOpen(true);
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-IN", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const openDeleteDialog = (problem: ProblemStatement) => {
     setSelectedProblem(problem);
     setDeleteOpen(true);
@@ -262,6 +303,33 @@ export default function Problems() {
     "Non-Academic": problems.filter((p) => p.theme === "Non-Academic").length,
     "Community Innovation": problems.filter((p) => p.theme === "Community Innovation").length,
   };
+
+  // If not accessible and not admin, show coming soon message
+  if (!isAccessible && !isAdmin && loading === false) {
+    return (
+      <Layout>
+        <section className="bg-primary py-16 lg:py-24">
+          <div className="container mx-auto px-4 text-center min-h-[60vh] flex flex-col items-center justify-center">
+            <AlertCircle className="w-16 h-16 text-primary-foreground mb-6" />
+            <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground mb-4">
+              Problem Statements Coming Soon
+            </h1>
+            <p className="text-primary-foreground/80 text-lg max-w-2xl mb-8">
+              Problem statements will be available from:
+            </p>
+            <div className="bg-primary-foreground/10 backdrop-blur-sm border border-primary-foreground/20 rounded-lg px-8 py-6 max-w-md">
+              <p className="text-2xl font-bold text-primary-foreground">
+                {earliestStartDate ? formatDate(earliestStartDate) : "Soon"}
+              </p>
+              <p className="text-primary-foreground/80 text-sm mt-2">
+                Mark your calendar and check back on this date!
+              </p>
+            </div>
+          </div>
+        </section>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

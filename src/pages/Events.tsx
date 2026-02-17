@@ -23,6 +23,7 @@ interface Event {
   organizer_contact: string | null;
   resource_person: string | null;
   problem_statement_deadline: string | null;
+  registration_start_date: string | null;
   registration_deadline: string | null;
   max_participants: number | null;
   is_active: boolean;
