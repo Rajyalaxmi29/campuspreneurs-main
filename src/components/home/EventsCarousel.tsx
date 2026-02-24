@@ -21,6 +21,23 @@ export function EventsCarousel() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // Show only a short preview in cards; full text appears in dialog.
+  const getPreviewDescription = (text: string, wordLimit = 4, charLimit = 36) => {
+    if (!text) return "";
+    const cleaned = text.trim().replace(/\s+/g, " ");
+    const words = cleaned.split(" ");
+
+    if (words.length > wordLimit) {
+      return `${words.slice(0, wordLimit).join(" ")}...`;
+    }
+
+    if (cleaned.length > charLimit) {
+      return `${cleaned.slice(0, charLimit).trimEnd()}...`;
+    }
+
+    return cleaned;
+  };
+
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsEvent, setDetailsEvent] = useState<Event | null>(null);
 
@@ -187,8 +204,8 @@ export function EventsCarousel() {
                 </div>
                 <CardContent className="p-4">
                   <h3 className="text-lg font-semibold mb-1">{evt.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {evt.description}
+                  <p className="text-sm text-muted-foreground break-words">
+                    {getPreviewDescription(evt.description)}
                   </p>
                   <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">

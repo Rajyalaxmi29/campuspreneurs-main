@@ -263,7 +263,7 @@ export default function Problems() {
   };
 
   const Countdown = () => (
-    <div className="text-center py-24 bg-card rounded-xl border border-border">
+    <div className="text-center py-24 bg-card rounded-3xl border border-border">
       <h2 className="text-3xl font-bold text-primary mb-4">Problems Locked</h2>
       <p className="text-muted-foreground mb-6">The problem statements will be available in:</p>
       <div className="text-5xl font-mono font-bold text-foreground">{timeRemaining}</div>
@@ -321,7 +321,7 @@ export default function Problems() {
                     <button
                       key={theme.id}
                       onClick={() => setActiveTheme(isActive ? "All" : theme.name)}
-                      className={`p-6 rounded-xl border-2 transition-all text-left ${isActive
+                      className={`p-6 rounded-3xl border-2 transition-all text-left ${isActive
                         ? "border-secondary bg-secondary/5 shadow-lg"
                         : "border-border bg-card hover:border-secondary/50 hover:shadow-md"
                         }`}
@@ -386,7 +386,7 @@ export default function Problems() {
               {/* Loading State */}
               {loading && (
                 <div className="text-center py-12">
-                  <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto mb-4 animate-pulse">
+                  <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 animate-pulse">
                     <Search className="w-6 h-6 text-primary-foreground" />
                   </div>
                   <p className="text-muted-foreground">Loading problem statements...</p>
@@ -395,7 +395,7 @@ export default function Problems() {
 
               {/* Error State */}
               {error && !loading && (
-                <div className="text-center py-12 bg-card rounded-xl border border-border">
+                <div className="text-center py-12 bg-card rounded-3xl border border-border">
                   <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
                   <p className="text-muted-foreground mb-4">{error}</p>
                   <Button
@@ -420,7 +420,7 @@ export default function Problems() {
                     {filteredProblems.map((problem) => (
                       <div
                         key={problem.id}
-                        className="bg-card rounded-xl border border-border hover:border-secondary/50 hover:shadow-card transition-all overflow-hidden"
+                        className="bg-card rounded-3xl border border-border hover:border-secondary/50 hover:shadow-card transition-all overflow-hidden"
                       >
                         <div className="flex flex-col lg:flex-row">
                           {/* Problem ID Section */}
@@ -489,7 +489,7 @@ export default function Problems() {
                   </div>
 
                   {filteredProblems.length === 0 && problems.length > 0 && (
-                    <div className="text-center py-12 bg-card rounded-xl border border-border">
+                    <div className="text-center py-12 bg-card rounded-3xl border border-border">
                       <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                       <p className="text-muted-foreground">No problem statements found matching your criteria.</p>
                       <Button
@@ -506,7 +506,7 @@ export default function Problems() {
                   )}
 
                   {problems.length === 0 && (
-                    <div className="text-center py-12 bg-card rounded-xl border border-border">
+                    <div className="text-center py-12 bg-card rounded-3xl border border-border">
                       <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                       <p className="text-foreground font-medium mb-2">No Problem Statements Yet</p>
                       <p className="text-muted-foreground">Problem statements will appear here once they are added to the database.</p>
@@ -521,7 +521,7 @@ export default function Problems() {
         <section className="py-12 lg:py-16 bg-background">
           <div className="container mx-auto px-4">
             {error ? (
-              <div className="text-center py-12 bg-card rounded-xl border border-border">
+              <div className="text-center py-12 bg-card rounded-3xl border border-border">
                 <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
                 <p className="text-muted-foreground mb-4">{error}</p>
                 <Button
@@ -590,7 +590,7 @@ export default function Problems() {
               </DialogHeader>
 
               {/* Table */}
-              <div className="mt-6 border border-border rounded-xl overflow-hidden">
+              <div className="mt-6 border border-border rounded-3xl overflow-hidden">
                 <table className="w-full border-collapse">
                   <tbody>
                     {/* ID */}
