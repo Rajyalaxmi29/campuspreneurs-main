@@ -190,9 +190,30 @@ export default function DepartmentsPage() {
 
   return (
     <Layout>
+      {/* Header */}
+      <section className="bg-primary py-16 lg:py-24">
+        <div className="container mx-auto px-4 text-center">
+          <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground">
+            Departments
+          </h1>
+          <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
+            Explore departments and their challenges. Browse through different themes and categories to find problems that align with your interests.
+          </p>
+          <div className="mt-6 flex justify-center gap-8 text-primary-foreground">
+            <div className="text-center">
+              <span className="text-3xl font-bold">{departments.length}</span>
+              <p className="text-sm">Total Departments</p>
+            </div>
+            <div className="text-center">
+              <span className="text-3xl font-bold">{Object.keys(grouped || {}).length}</span>
+              <p className="text-sm">Themes</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="container mx-auto p-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <h1 className="text-3xl font-bold">Departments</h1>
           <div className="flex gap-4">
             <select
               value={selectedTheme}
