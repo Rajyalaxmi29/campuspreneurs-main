@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -63,7 +63,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      // Use 'local' scope to prevent 403 errors when the session is already expired.
+      // Global scope attempts to invalidate the token on the server, which fails if it's already expired.
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) {
+        console.warn("Supabase sign out warning:", error.message);
+      }
+    } catch (err) {
+      console.error("Unexpected error during sign out:", err);
+    } finally {
+      // Force clear local React state to prevent stale data
+      setUser(null);
+      setSession(null);
+      // Cleanly redirect to login page (which is the root "/")
+      // Using replace to prevent navigating back to a protected route
+      window.location.replace("/");
+    }
   };
 
   return (

@@ -43,6 +43,7 @@ interface ProblemStatement {
   category: string | null;
   theme: string | null;
   department: string | null;
+  status: string | null;
   created_at: string;
 }
 
@@ -71,10 +72,16 @@ export default function Problems() {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
+    let query = supabase
       .from("problem_statements")
       .select("*")
       .order("problem_statement_id", { ascending: true });
+
+    if (!isAdmin) {
+      query = query.eq("status", "approved");
+    }
+
+    const { data, error: fetchError } = await query;
 
     console.log("Fetched data:", data);
     console.log("Fetch error:", fetchError);
@@ -314,11 +321,10 @@ export default function Problems() {
                     <button
                       key={theme.id}
                       onClick={() => setActiveTheme(isActive ? "All" : theme.name)}
-                      className={`p-6 rounded-xl border-2 transition-all text-left ${
-                        isActive
-                          ? "border-secondary bg-secondary/5 shadow-lg"
-                          : "border-border bg-card hover:border-secondary/50 hover:shadow-md"
-                      }`}
+                      className={`p-6 rounded-xl border-2 transition-all text-left ${isActive
+                        ? "border-secondary bg-secondary/5 shadow-lg"
+                        : "border-border bg-card hover:border-secondary/50 hover:shadow-md"
+                        }`}
                     >
                       <div className={`w-12 h-12 rounded-lg ${theme.color} flex items-center justify-center mb-4`}>
                         <Icon className="w-6 h-6 text-white" />
@@ -349,11 +355,10 @@ export default function Problems() {
                     <button
                       key={theme}
                       onClick={() => setActiveTheme(theme)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                        activeTheme === theme
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-accent"
-                      }`}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTheme === theme
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent"
+                        }`}
                     >
                       {theme} ({problemCounts[theme as keyof typeof problemCounts]})
                     </button>

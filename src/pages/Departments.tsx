@@ -26,16 +26,22 @@ export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<string[]>([]);
   const [primaryThemeForDept, setPrimaryThemeForDept] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedTheme, setSelectedTheme] = useState<string>("All");
+  const [selectedDept, setSelectedDept] = useState<string>("All");
   const { isAdmin } = useAdmin();
 
   const [formOpen, setFormOpen] = useState(false);
   const [selected, setSelected] = useState<ProblemRow | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [remarkText, setRemarkText] = useState("");
+  const [rejectingProblem, setRejectingProblem] = useState<ProblemRow | null>(null);
+
   const fetch = async () => {
     setLoading(true);
     const [{ data: problemsData, error: problemsError }, { data: regsData, error: regsError }] = await Promise.all([
-      supabase.from("problem_statements").select("*").order("created_at", { ascending: false }),
+      supabase.from("problem_statements").select("*").eq("status", "pending_review").order("created_at", { ascending: false }),
       supabase.from("team_registrations").select("department"),
     ]);
 
@@ -115,6 +121,52 @@ export default function DepartmentsPage() {
     } catch (err: any) { toast.error(err.message || "Failed to save"); }
   };
 
+  const openRejectDialog = (p: ProblemRow) => {
+    setRejectingProblem(p);
+    setRemarkText("");
+    setRejectOpen(true);
+  };
+
+  const handleReject = async () => {
+    if (!rejectingProblem) return;
+    if (!remarkText.trim()) {
+      toast.error("Please enter a remark");
+      return;
+    }
+
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) throw new Error("User not authenticated");
+      const userId = userData.user.id;
+
+      // 1️⃣ Insert remark
+      const { error: remarkError } = await (supabase as any)
+        .from("problem_statement_remarks")
+        .insert({
+          problem_statement_id: rejectingProblem.id,
+          remark: remarkText,
+          author_id: userId,
+        });
+
+      if (remarkError) throw remarkError;
+
+      // 2️⃣ Update status
+      const { error: statusError } = await supabase
+        .from("problem_statements")
+        .update({ status: "revision_needed" })
+        .eq("id", rejectingProblem.id);
+
+      if (statusError) throw statusError;
+
+      toast.success("Problem rejected with remark");
+      setRejectOpen(false);
+      setRejectingProblem(null);
+      fetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reject problem");
+    }
+  };
+
   const handleStatus = async (id: string, status: string) => {
     try {
       const { error } = await supabase.from("problem_statements").update({ status }).eq("id", id);
@@ -139,11 +191,35 @@ export default function DepartmentsPage() {
   return (
     <Layout>
       <div className="container mx-auto p-4">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <h1 className="text-3xl font-bold">Departments</h1>
+          <div className="flex gap-4">
+            <select
+              value={selectedTheme}
+              onChange={(e) => setSelectedTheme(e.target.value)}
+              className="border border-input rounded-md px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="All">All Themes</option>
+              {Object.keys(grouped || {}).sort().map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              value={selectedDept}
+              onChange={(e) => setSelectedDept(e.target.value)}
+              className="border border-input rounded-md px-3 py-2 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="All">All Departments</option>
+              {departments.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {loading ? <p>Loading...</p> : (
+        {loading ? <p>Loading...</p> : Object.keys(grouped || {}).length === 0 ? (
+          <p className="text-muted-foreground text-center py-8">No problem statements to verify</p>
+        ) : (
           <div className="space-y-6">
             {(() => {
               const allThemeKeys = Object.keys(grouped || {});
@@ -153,6 +229,8 @@ export default function DepartmentsPage() {
               allThemeKeys.filter(t => t !== "Academic").sort().forEach(t => themeKeys.push(t));
 
               return themeKeys.map((theme) => {
+                if (selectedTheme !== "All" && theme !== selectedTheme) return null;
+
                 const deptsMap = grouped[theme] || {};
                 // Build department set for this theme based on primary mapping and actual data
                 const deptSetForTheme = new Set<string>();
@@ -164,58 +242,69 @@ export default function DepartmentsPage() {
                 departments.forEach((d) => {
                   if (primaryThemeForDept[d] === theme) deptSetForTheme.add(d);
                 });
-                const deptKeys = Array.from(deptSetForTheme).sort();
+                let deptKeys = Array.from(deptSetForTheme).sort();
+
+                if (selectedDept !== "All") {
+                  deptKeys = deptKeys.filter(dept => dept === selectedDept);
+                }
+
+                // If this theme has no departments with actual problems, skip it
+                if (deptKeys.length === 0 || deptKeys.every(dept => !deptsMap[dept])) return null;
+
                 return (
                   <section key={theme} className="bg-card rounded-xl border border-border p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-xl font-semibold">{theme}</h2>
-                      <span className="text-sm text-muted-foreground">{Object.values(deptsMap || {}).reduce((s: number, dm: any) => s + Object.values(dm).reduce((t: number, arr: any) => t + (arr?.length||0), 0), 0)} problems</span>
+                      <span className="text-sm text-muted-foreground">{Object.values(deptsMap || {}).reduce((s: number, dm: any) => s + Object.values(dm).reduce((t: number, arr: any) => t + (arr?.length || 0), 0), 0)} problems</span>
                     </div>
 
                     <div className="space-y-4">
-                      {deptKeys.map((dept) => (
-                        <div key={dept} className="bg-card rounded border border-border p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-semibold">{dept}</h3>
-                          </div>
-                          <div className="grid gap-3">
-                            {Object.keys(deptsMap?.[dept] || {}).map((cat) => (
-                              <div key={cat} className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="text-sm font-medium">{cat}</div>
-                                  <div className="text-sm text-muted-foreground">{(deptsMap?.[dept]?.[cat] || []).length} problems</div>
-                                </div>
-                                {(deptsMap?.[dept]?.[cat] || []).map((p: ProblemRow) => (
-                                  <div key={p.id} className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
-                                    <div>
-                                      <div className="text-sm text-muted-foreground">{p.problem_statement_id}</div>
-                                      <h4 className="font-semibold">{p.title}</h4>
-                                      <p className="text-sm text-muted-foreground line-clamp-2">{p.description}</p>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                      {isAdmin && (
-                                        <>
-                                          <div className="flex gap-2">
-                                            <Button variant="outline" size="icon" onClick={() => openEdit(p)} title="Edit"><Edit className="w-4 h-4"/></Button>
-                                            <Button variant="outline" size="icon" onClick={() => { setSelected(p); setDeleteOpen(true); }} title="Delete"><Trash2 className="w-4 h-4"/></Button>
-                                          </div>
-                                          <div className="flex gap-2">
-                                            <Button size="sm" variant="success" onClick={() => handleStatus(p.id, 'accepted')}><Check className="w-4 h-4 mr-1"/>Accept</Button>
-                                            <Button size="sm" variant="destructive" onClick={() => handleStatus(p.id, 'rejected')}><X className="w-4 h-4 mr-1"/>Reject</Button>
-                                          </div>
-                                        </>
-                                      )}
-                                      <Button size="sm" variant="orange" asChild>
-                                        <Link to={`/problems/${p.problem_statement_id}`}>View Details<ArrowRight className="w-4 h-4 ml-1"/></Link>
-                                      </Button>
-                                    </div>
+                      {deptKeys.map((dept) => {
+                        if (!deptsMap?.[dept]) return null;
+                        return (
+                          <div key={dept} className="bg-card rounded border border-border p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="font-semibold">{dept}</h3>
+                            </div>
+                            <div className="grid gap-3">
+                              {Object.keys(deptsMap?.[dept] || {}).map((cat) => (
+                                <div key={cat} className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm font-medium">{cat}</div>
+                                    <div className="text-sm text-muted-foreground">{(deptsMap?.[dept]?.[cat] || []).length} problems</div>
                                   </div>
-                                ))}
-                              </div>
-                            ))}
+                                  {(deptsMap?.[dept]?.[cat] || []).map((p: ProblemRow) => (
+                                    <div key={p.id} className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
+                                      <div>
+                                        <div className="text-sm text-muted-foreground">{p.problem_statement_id}</div>
+                                        <h4 className="font-semibold">{p.title}</h4>
+                                        <p className="text-sm text-muted-foreground line-clamp-2">{p.description}</p>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-2">
+                                        {isAdmin && (
+                                          <>
+                                            <div className="flex gap-2">
+                                              <Button variant="outline" size="icon" onClick={() => openEdit(p)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                                              <Button variant="outline" size="icon" onClick={() => { setSelected(p); setDeleteOpen(true); }} title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStatus(p.id, 'approved')}><Check className="w-4 h-4 mr-1" />Accept</Button>
+                                              <Button size="sm" variant="destructive" onClick={() => openRejectDialog(p)}><X className="w-4 h-4 mr-1" />Reject</Button>
+                                            </div>
+                                          </>
+                                        )}
+                                        <Button size="sm" variant="outline" asChild>
+                                          <Link to={`/problems/${p.problem_statement_id}`}>View Details<ArrowRight className="w-4 h-4 ml-1" /></Link>
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </section>
                 );
@@ -224,7 +313,31 @@ export default function DepartmentsPage() {
           </div>
         )}
 
-        <ProblemFormDialog open={formOpen} onOpenChange={setFormOpen} problem={selected} onSave={handleSave} loading={loading} />
+        {/* Reject Dialog */}
+        {rejectOpen && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-card text-card-foreground rounded-lg border border-border p-6 w-[400px] space-y-4 shadow-lg">
+              <h2 className="text-lg font-semibold">Reject with Remark</h2>
+              <textarea
+                className="w-full border border-border rounded-md p-3 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                rows={4}
+                placeholder="Enter remark..."
+                value={remarkText}
+                onChange={(e) => setRemarkText(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setRejectOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleReject}>
+                  Submit
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <ProblemFormDialog open={formOpen} onOpenChange={setFormOpen} problem={selected as any} onSave={handleSave as any} loading={loading} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={confirmDelete} title="Delete Problem" description={`Delete "${selected?.title}"?`} />
       </div>
     </Layout>
