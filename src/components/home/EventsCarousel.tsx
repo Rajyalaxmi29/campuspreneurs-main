@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 interface Event {
   id: string;
@@ -17,12 +16,16 @@ interface Event {
 
 export function EventsCarousel() {
   const [events, setEvents] = useState<Event[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(true);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [cardsPerView, setCardsPerView] = useState(3);
+  const [autoScrollResetKey, setAutoScrollResetKey] = useState(0);
 
-  // Show only a short preview in cards; full text appears in dialog.
-  const getPreviewDescription = (text: string, wordLimit = 4, charLimit = 36) => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsEvent, setDetailsEvent] = useState<Event | null>(null);
+
+  const getPreviewDescription = (text: string, wordLimit = 10, charLimit = 100) => {
     if (!text) return "";
     const cleaned = text.trim().replace(/\s+/g, " ");
     const words = cleaned.split(" ");
@@ -38,9 +41,6 @@ export function EventsCarousel() {
     return cleaned;
   };
 
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [detailsEvent, setDetailsEvent] = useState<Event | null>(null);
-
   const openDetails = (evt: Event) => {
     setDetailsEvent(evt);
     setDetailsOpen(true);
@@ -55,13 +55,10 @@ export function EventsCarousel() {
       const { data, error } = await supabase
         .from("events")
         .select("*")
-        // only show active events; if you're testing with stale data you may
-        // need to mark records as active or remove this filter temporarily.
         .eq("is_active", true)
         .order("event_date", { ascending: true });
 
       if (error) throw error;
-      console.log("supabase returned events", data);
       setEvents(data || []);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -69,9 +66,6 @@ export function EventsCarousel() {
       setLoading(false);
     }
   };
-
-  // number of cards visible at once, responsive
-  const [cardsPerView, setCardsPerView] = useState(3);
 
   const updateCardsPerView = () => {
     const w = window.innerWidth;
@@ -86,33 +80,73 @@ export function EventsCarousel() {
     return () => window.removeEventListener("resize", updateCardsPerView);
   }, []);
 
-  const maxIndex = Math.max(0, events.length - cardsPerView);
+  const canSlide = events.length > cardsPerView;
+  const renderedEvents = canSlide
+    ? [...events.slice(-cardsPerView), ...events, ...events.slice(0, cardsPerView)]
+    : events;
 
-  const nextSlide = () => {
-    setCurrentIndex((prev) => {
-      const next = prev + 1;
-      // stop at end rather than wrap
-      return next > maxIndex ? maxIndex : next;
-    });
+  useEffect(() => {
+    setIsTransitioning(true);
+    setSlideIndex(canSlide ? cardsPerView : 0);
+  }, [canSlide, cardsPerView, events.length]);
+
+  const getRealStartIndex = () => {
+    if (!canSlide || events.length === 0) return 0;
+    const raw = (slideIndex - cardsPerView) % events.length;
+    return raw < 0 ? raw + events.length : raw;
+  };
+
+  const resetAutoScrollTimer = () => {
+    setAutoScrollResetKey((prev) => prev + 1);
+  };
+
+  const nextSlide = (manual = false) => {
+    if (!canSlide) return;
+    setIsTransitioning(true);
+    setSlideIndex((prev) => prev + 1);
+    if (manual) resetAutoScrollTimer();
   };
 
   const prevSlide = () => {
-    setCurrentIndex((prev) => {
-      const next = prev - 1;
-      return next < 0 ? 0 : next;
-    });
+    if (!canSlide) return;
+    setIsTransitioning(true);
+    setSlideIndex((prev) => prev - 1);
+    resetAutoScrollTimer();
   };
 
-  // auto-scroll effect (needs nextSlide and cardsPerView in scope)
-  useEffect(() => {
-    if (events.length > cardsPerView && currentIndex < maxIndex) {
-      const interval = setInterval(() => {
-        nextSlide();
-      }, 5000); // Auto-slide every 5 seconds
+  const goToSlide = (index: number) => {
+    if (!canSlide) return;
+    setIsTransitioning(true);
+    setSlideIndex(cardsPerView + index);
+    resetAutoScrollTimer();
+  };
 
-      return () => clearInterval(interval);
+  const handleTrackTransitionEnd = () => {
+    if (!canSlide) return;
+
+    if (slideIndex >= events.length + cardsPerView) {
+      setIsTransitioning(false);
+      setSlideIndex(cardsPerView);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsTransitioning(true)));
+      return;
     }
-  }, [events.length, cardsPerView, currentIndex, maxIndex]);
+
+    if (slideIndex < cardsPerView) {
+      setIsTransitioning(false);
+      setSlideIndex(events.length + slideIndex);
+      requestAnimationFrame(() => requestAnimationFrame(() => setIsTransitioning(true)));
+    }
+  };
+
+  useEffect(() => {
+    if (!canSlide) return;
+
+    const interval = setInterval(() => {
+      nextSlide();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [canSlide, autoScrollResetKey]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -148,126 +182,141 @@ export function EventsCarousel() {
   }
 
   if (events.length === 0) {
-    // show a more informative message in development
     return (
       <section className="py-16 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="text-center">
             <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">
-              No upcoming events at the moment. (fetched {events.length})
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Check console for fetched data and/or ensure the `is_active` flag on
-              your events is true.
-            </p>
+            <p className="text-muted-foreground">No upcoming events at the moment.</p>
           </div>
         </div>
       </section>
     );
   }
 
+  const visibleStartIndex = getRealStartIndex();
+
   return (
-    <section className="py-16 bg-muted/30">
+    <section className="py-16 bg-gradient-to-b from-slate-100/70 to-slate-200/50">
       <div className="container mx-auto px-4">
-<div className="text-center mb-6">
-            <h2 className="text-3xl font-poppins font-bold text-foreground mb-2">
-              Upcoming Events
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Stay updated with the latest Incamp events, workshops, and important dates.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Showing {currentIndex + 1}–{Math.min(currentIndex + cardsPerView, events.length)} of {events.length}
-            </p>
-          </div>
+        <div className="text-center mb-8">
+          <h2 className="text-3xl md:text-4xl font-poppins font-semibold tracking-tight text-slate-900 mb-3">
+            Upcoming Events
+          </h2>
+          <p className="text-slate-600 max-w-2xl mx-auto text-base md:text-lg leading-relaxed">
+            Stay updated with the latest Incamp events, workshops, and important dates.
+          </p>
+          <p className="inline-flex items-center gap-2 text-sm text-slate-700 mt-4 rounded-full border border-slate-300/80 bg-white/70 px-4 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-orange-500" />
+            Showing {visibleStartIndex + 1}-{Math.min(visibleStartIndex + cardsPerView, events.length)} of {events.length}
+          </p>
+        </div>
 
-        {/* carousel viewport */}
-        <div className="relative max-w-5xl mx-auto overflow-hidden">
-          <div
-            className="flex transition-transform duration-500"
-            style={{ transform: `translateX(-${(currentIndex * 100) / cardsPerView}%)` }}
-          >
-            {events.map((evt) => (
-              <Card
-                key={evt.id}
-                className="flex-shrink-0 m-2 shadow-lg"
-                style={{ flex: `0 0 ${100 / cardsPerView}%` }}
-              >
-                <div className="relative">
-                  <img
-                    src={evt.image_url || "/og-image.png"}
-                    alt={evt.title}
-                    className="w-full h-40 object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+        <div className="relative mx-auto max-w-6xl px-12 md:px-16">
+          <div className="overflow-hidden">
+            <div
+              className={`flex ${isTransitioning ? "transition-transform duration-500 ease-out" : ""}`}
+              style={{ transform: `translateX(-${(slideIndex * 100) / cardsPerView}%)` }}
+              onTransitionEnd={handleTrackTransitionEnd}
+            >
+              {renderedEvents.map((evt, idx) => (
+                <div
+                  key={`${evt.id}-${idx}`}
+                  className="flex-shrink-0 px-3 py-2"
+                  style={{ flex: `0 0 ${100 / cardsPerView}%` }}
+                >
+                  <Card className="group h-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.10)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(15,23,42,0.16)]">
+                    <div className="relative">
+                      <img
+                        src={evt.image_url || "/og-image.png"}
+                        alt={evt.title}
+                        className="h-44 w-full object-cover md:h-48 lg:h-52"
+                      />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-black/5 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-100" />
+                    </div>
+
+                    <CardContent className="p-5">
+                      <h3 className="text-2xl font-semibold tracking-tight text-slate-900">{evt.title}</h3>
+                      <p className="mt-2 min-h-[2.75rem] text-sm leading-relaxed text-slate-600 break-words">
+                        {getPreviewDescription(evt.description)}
+                      </p>
+
+                      <div className="mt-4 space-y-2 text-sm text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-slate-500" />
+                          <span className="leading-none">{formatDate(evt.event_date)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-slate-500" />
+                          <span className="leading-none">{formatTime(evt.event_date)}</span>
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="orange"
+                        size="sm"
+                        className="mt-5 h-11 w-full rounded-xl text-base font-medium transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_22px_rgba(249,115,22,0.35)]"
+                        onClick={() => openDetails(evt)}
+                      >
+                        Learn More
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
-                <CardContent className="p-4">
-                  <h3 className="text-lg font-semibold mb-1">{evt.title}</h3>
-                  <p className="text-sm text-muted-foreground break-words">
-                    {getPreviewDescription(evt.description)}
-                  </p>
-                  <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>{formatDate(evt.event_date)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatTime(evt.event_date)}</span>
-                    </div>
-                  </div>
-                  <Button
-                    variant="orange"
-                    size="sm"
-                    className="mt-4 w-full"
-                    onClick={() => openDetails(evt)}
-                  >
-                    Learn More
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* arrows */}
-          {events.length > cardsPerView && (
+          {canSlide && (
             <>
-              {currentIndex > 0 && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background"
-                  onClick={prevSlide}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute left-0 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-all duration-200 hover:-translate-y-1/2 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_16px_36px_rgba(15,23,42,0.24)]"
+                onClick={prevSlide}
+                aria-label="Previous events"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
 
-              {currentIndex < maxIndex && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background"
-                  onClick={nextSlide}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute right-0 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full border border-slate-200 bg-white text-slate-700 shadow-[0_12px_30px_rgba(15,23,42,0.16)] transition-all duration-200 hover:-translate-y-1/2 hover:scale-105 hover:bg-slate-50 hover:shadow-[0_16px_36px_rgba(15,23,42,0.24)]"
+                onClick={() => nextSlide(true)}
+                aria-label="Next events"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </Button>
             </>
           )}
         </div>
+
+        {canSlide && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            {events.map((evt, index) => (
+              <button
+                key={evt.id}
+                type="button"
+                aria-label={`Go to event ${index + 1}`}
+                onClick={() => goToSlide(index)}
+                className={`h-2.5 rounded-full transition-all duration-300 ${
+                  visibleStartIndex === index
+                    ? "w-8 bg-slate-800"
+                    : "w-2.5 bg-slate-300 hover:bg-slate-400"
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Event details dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           {detailsEvent && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-2xl font-bold">
-                  {detailsEvent.title}
-                </DialogTitle>
+                <DialogTitle className="text-2xl font-bold">{detailsEvent.title}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <img
@@ -275,9 +324,7 @@ export function EventsCarousel() {
                   alt={detailsEvent.title}
                   className="w-full h-60 object-cover rounded-lg"
                 />
-                <p className="text-muted-foreground">
-                  {detailsEvent.description}
-                </p>
+                <p className="text-muted-foreground">{detailsEvent.description}</p>
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
@@ -302,4 +349,3 @@ export function EventsCarousel() {
     </section>
   );
 }
-
