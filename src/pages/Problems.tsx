@@ -43,6 +43,7 @@ interface ProblemStatement {
   category: string | null;
   theme: string | null;
   department: string | null;
+  status: string | null;
   created_at: string;
   approved_at?: string;
 }
@@ -53,6 +54,9 @@ export default function Problems() {
   const [problems, setProblems] = useState<ProblemStatement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unlockTime, setUnlockTime] = useState<Date | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const { isAdmin } = useAdmin();
 
   // Admin state
@@ -69,11 +73,17 @@ export default function Problems() {
     setLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
+    let query = supabase
       .from("problem_statements")
       .select("*")
       .not("approved_at", "is", null)
       .order("problem_statement_id", { ascending: true });
+
+    if (!isAdmin) {
+      query = query.eq("status", "approved");
+    }
+
+    const { data, error: fetchError } = await query;
 
     console.log("Fetched data:", data);
     console.log("Fetch error:", fetchError);
@@ -90,8 +100,66 @@ export default function Problems() {
   };
 
   useEffect(() => {
-    fetchProblems();
-  }, []);
+    const fetchUnlockTime = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("contest_settings")
+          .select("problems_unlock_at")
+          .single();
+
+        if (error) throw error;
+
+        const unlockDate = new Date(data.problems_unlock_at);
+        setUnlockTime(unlockDate);
+
+        if (isAdmin) {
+          setIsUnlocked(true);
+          return;
+        }
+
+        const now = new Date();
+        if (now >= unlockDate) {
+          setIsUnlocked(true);
+        }
+      } catch (err: any) {
+        setError("Failed to load contest settings. Please try again later.");
+        console.error("Error fetching unlock time:", err);
+      }
+    };
+
+    fetchUnlockTime();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (isUnlocked) {
+      fetchProblems();
+    }
+  }, [isUnlocked]);
+
+  useEffect(() => {
+    if (!unlockTime || isUnlocked) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const distance = unlockTime.getTime() - now.getTime();
+
+      if (distance < 0) {
+        clearInterval(interval);
+        setIsUnlocked(true);
+        setTimeRemaining("");
+        return;
+      }
+
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+      setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [unlockTime, isUnlocked]);
 
   const handleSave = async (data: Omit<ProblemStatement, "id" | "created_at">) => {
     setSaving(true);
@@ -237,6 +305,14 @@ export default function Problems() {
     "Community Innovation": problems.filter((p) => p.theme === "Community Innovation").length,
   };
 
+  const Countdown = () => (
+    <div className="text-center py-24 bg-card rounded-3xl border border-border">
+      <h2 className="text-3xl font-bold text-primary mb-4">Problems Locked</h2>
+      <p className="text-muted-foreground mb-6">The problem statements will be available in:</p>
+      <div className="text-5xl font-mono font-bold text-foreground">{timeRemaining}</div>
+    </div>
+  );
+
   return (
     <Layout>
       {/* Header */}
@@ -262,7 +338,8 @@ export default function Problems() {
             <Button
               onClick={openCreateDialog}
               className="mt-6"
-              variant="heroOutline"
+              variant="orange"
+              size="sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Problem Statement
@@ -271,217 +348,238 @@ export default function Problems() {
         </div>
       </section>
 
-      {/* Theme Cards */}
-      <section className="py-12 bg-highlight">
-        <div className="container mx-auto px-4">
-          <h2 className="text-xl font-poppins font-semibold text-foreground text-center mb-8">
-            Select a Theme
-          </h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            {themes.map((theme) => {
-              const Icon = theme.icon;
-              const isActive = activeTheme === theme.name;
-              return (
-                <button
-                  key={theme.id}
-                  onClick={() => setActiveTheme(isActive ? "All" : theme.name)}
-                  className={`p-6 rounded-xl border-2 transition-all text-left ${
-                    isActive
-                      ? "border-secondary bg-secondary/5 shadow-lg"
-                      : "border-border bg-card hover:border-secondary/50 hover:shadow-md"
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-lg ${theme.color} flex items-center justify-center mb-4`}>
-                    <Icon className="w-6 h-6 text-white" />
+      {isUnlocked ? (
+        <>
+          {/* Theme Cards */}
+          <section className="py-12 bg-highlight">
+            <div className="container mx-auto px-4">
+              <h2 className="text-xl font-poppins font-semibold text-foreground text-center mb-8">
+                Select a Theme
+              </h2>
+              <div className="grid md:grid-cols-3 gap-6">
+                {themes.map((theme) => {
+                  const Icon = theme.icon;
+                  const isActive = activeTheme === theme.name;
+                  return (
+                    <button
+                      key={theme.id}
+                      onClick={() => setActiveTheme(isActive ? "All" : theme.name)}
+                      className={`p-6 rounded-3xl border-2 transition-all text-left ${isActive
+                        ? "border-secondary bg-secondary/5 shadow-lg"
+                        : "border-border bg-card hover:border-secondary/50 hover:shadow-md"
+                        }`}
+                    >
+                      <div className={`w-12 h-12 rounded-lg ${theme.color} flex items-center justify-center mb-4`}>
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <h3 className="font-poppins font-semibold text-lg text-foreground mb-2">
+                        {theme.name}
+                      </h3>
+                      <p className="text-muted-foreground text-sm mb-3">
+                        {theme.description}
+                      </p>
+                      <span className="text-secondary font-medium text-sm">
+                        {problemCounts[theme.name as keyof typeof problemCounts]} Problems
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Search & Filter Bar */}
+          <section className="py-6 bg-background border-b border-border sticky top-16 lg:top-20 z-40">
+            <div className="container mx-auto px-4">
+              <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+                {/* Theme Pills */}
+                <div className="flex flex-wrap gap-2">
+                  {["All", "Academic", "Non-Academic", "Community Innovation"].map((theme) => (
+                    <button
+                      key={theme}
+                      onClick={() => setActiveTheme(theme)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeTheme === theme
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent"
+                        }`}
+                    >
+                      {theme} ({problemCounts[theme as keyof typeof problemCounts]})
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search */}
+                <div className="relative w-full lg:w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search by ID, title, category, department, or keyword..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Problem Cards */}
+          <section className="py-12 lg:py-16 bg-background">
+            <div className="container mx-auto px-4">
+              {/* Loading State */}
+              {loading && (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <Search className="w-6 h-6 text-primary-foreground" />
                   </div>
-                  <h3 className="font-poppins font-semibold text-lg text-foreground mb-2">
-                    {theme.name}
-                  </h3>
-                  <p className="text-muted-foreground text-sm mb-3">
-                    {theme.description}
-                  </p>
-                  <span className="text-secondary font-medium text-sm">
-                    {problemCounts[theme.name as keyof typeof problemCounts]} Problems
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+                  <p className="text-muted-foreground">Loading problem statements...</p>
+                </div>
+              )}
 
-      {/* Search & Filter Bar */}
-      <section className="py-6 bg-background border-b border-border sticky top-16 lg:top-20 z-40">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-            {/* Theme Pills */}
-            <div className="flex flex-wrap gap-2">
-              {["All", "Academic", "Non-Academic", "Community Innovation"].map((theme) => (
-                <button
-                  key={theme}
-                  onClick={() => setActiveTheme(theme)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                    activeTheme === theme
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-accent"
-                  }`}
-                >
-                  {theme} ({problemCounts[theme as keyof typeof problemCounts]})
-                </button>
-              ))}
-            </div>
-
-            {/* Search */}
-            <div className="relative w-full lg:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search by ID, title, category, department, or keyword..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Problem Cards */}
-      <section className="py-12 lg:py-16 bg-background">
-        <div className="container mx-auto px-4">
-          {/* Loading State */}
-          {loading && (
-            <div className="text-center py-12">
-              <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <Search className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <p className="text-muted-foreground">Loading problem statements...</p>
-            </div>
-          )}
-
-          {/* Error State */}
-          {error && !loading && (
-            <div className="text-center py-12 bg-card rounded-xl border border-border">
-              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button
-                variant="outline"
-                onClick={() => window.location.reload()}
-              >
-                Try Again
-              </Button>
-            </div>
-          )}
-
-          {/* Problems List */}
-          {!loading && !error && (
-            <>
-              <div className="mb-6 flex items-center justify-between">
-                <p className="text-muted-foreground">
-                  Showing <span className="font-semibold text-foreground">{filteredProblems.length}</span> problem statements
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                {filteredProblems.map((problem) => (
-                  <div
-                    key={problem.id}
-                    className="bg-card rounded-xl border border-border hover:border-secondary/50 hover:shadow-card transition-all overflow-hidden"
-                  >
-                    <div className="flex flex-col lg:flex-row">
-                      {/* Problem ID Section */}
-                      <div className={`lg:w-32 p-4 lg:p-6 flex lg:flex-col items-center lg:items-start justify-center ${getThemeColor(problem.theme)}`}>
-                        <span className="text-2xl lg:text-3xl font-bold font-poppins">{problem.problem_statement_id}</span>
-                      </div>
-
-                      {/* Main Content */}
-                      <div className="flex-1 p-4 lg:p-6">
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getThemeColor(problem.theme)}`}>
-                            {problem.theme}
-                          </span>
-                          <span className="bg-muted px-3 py-1 rounded-full text-xs font-medium text-muted-foreground">
-                            {problem.category}
-                          </span>
-                          <span className="bg-accent px-3 py-1 rounded-full text-xs font-medium text-accent-foreground">
-                            {problem.department || "Not specified"}
-                          </span>
-                        </div>
-
-                        <h3 className="font-poppins font-semibold text-lg text-foreground mb-2">
-                          {problem.title}
-                        </h3>
-
-                        <p className="text-muted-foreground text-sm line-clamp-2">
-                          {problem.description}
-                        </p>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="lg:w-auto p-4 lg:p-6 flex items-center justify-center gap-2 border-t lg:border-t-0 lg:border-l border-border bg-highlight/50">
-                        {isAdmin && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => openEditDialog(problem)}
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => openDeleteDialog(problem)}
-                              title="Delete"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="orange"
-                          onClick={() => openModal(problem)}
-                        >
-                          View Details
-                          <ArrowRight className="w-4 h-4 ml-1" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {filteredProblems.length === 0 && problems.length > 0 && (
-                <div className="text-center py-12 bg-card rounded-xl border border-border">
-                  <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No problem statements found matching your criteria.</p>
+              {/* Error State */}
+              {error && !loading && (
+                <div className="text-center py-12 bg-card rounded-3xl border border-border">
+                  <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                  <p className="text-muted-foreground mb-4">{error}</p>
                   <Button
                     variant="outline"
-                    className="mt-4"
-                    onClick={() => {
-                      setActiveTheme("All");
-                      setSearchQuery("");
-                    }}
+                    onClick={() => window.location.reload()}
                   >
-                    Clear Filters
+                    Try Again
                   </Button>
                 </div>
               )}
 
-              {problems.length === 0 && (
-                <div className="text-center py-12 bg-card rounded-xl border border-border">
-                  <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-foreground font-medium mb-2">No Problem Statements Yet</p>
-                  <p className="text-muted-foreground">Problem statements will appear here once they are added to the database.</p>
-                </div>
+              {/* Problems List */}
+              {!loading && !error && (
+                <>
+                  <div className="mb-6 flex items-center justify-between">
+                    <p className="text-muted-foreground">
+                      Showing <span className="font-semibold text-foreground">{filteredProblems.length}</span> problem statements
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {filteredProblems.map((problem) => (
+                      <div
+                        key={problem.id}
+                        className="bg-card rounded-3xl border border-border hover:border-secondary/50 hover:shadow-card transition-all overflow-hidden"
+                      >
+                        <div className="flex flex-col lg:flex-row">
+                          {/* Problem ID Section */}
+                          <div className={`lg:w-32 p-4 lg:p-6 flex lg:flex-col items-center lg:items-start justify-center ${getThemeColor(problem.theme)}`}>
+                            <span className="text-2xl lg:text-3xl font-bold font-poppins">{problem.problem_statement_id}</span>
+                          </div>
+
+                          {/* Main Content */}
+                          <div className="flex-1 p-4 lg:p-6">
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getThemeColor(problem.theme)}`}>
+                                {problem.theme}
+                              </span>
+                              <span className="bg-muted px-3 py-1 rounded-full text-xs font-medium text-muted-foreground">
+                                {problem.category}
+                              </span>
+                              <span className="bg-accent px-3 py-1 rounded-full text-xs font-medium text-accent-foreground">
+                                {problem.department || "Not specified"}
+                              </span>
+                            </div>
+
+                            <h3 className="font-poppins font-semibold text-lg text-foreground mb-2">
+                              {problem.title}
+                            </h3>
+
+                            <p className="text-muted-foreground text-sm line-clamp-2">
+                              {problem.description}
+                            </p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="lg:w-auto p-4 lg:p-6 flex items-center justify-center gap-2 border-t lg:border-t-0 lg:border-l border-border bg-highlight/50">
+                            {isAdmin && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => openEditDialog(problem)}
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => openDeleteDialog(problem)}
+                                  title="Delete"
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="orange"
+                              onClick={() => openModal(problem)}
+                            >
+                              View Details
+                              <ArrowRight className="w-4 h-4 ml-1" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {filteredProblems.length === 0 && problems.length > 0 && (
+                    <div className="text-center py-12 bg-card rounded-3xl border border-border">
+                      <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No problem statements found matching your criteria.</p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => {
+                          setActiveTheme("All");
+                          setSearchQuery("");
+                        }}
+                      >
+                        Clear Filters
+                      </Button>
+                    </div>
+                  )}
+
+                  {problems.length === 0 && (
+                    <div className="text-center py-12 bg-card rounded-3xl border border-border">
+                      <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-foreground font-medium mb-2">No Problem Statements Yet</p>
+                      <p className="text-muted-foreground">Problem statements will appear here once they are added to the database.</p>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
-      </section>
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="py-12 lg:py-16 bg-background">
+          <div className="container mx-auto px-4">
+            {error ? (
+              <div className="text-center py-12 bg-card rounded-3xl border border-border">
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                <p className="text-muted-foreground mb-4">{error}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.reload()}
+                >
+                  Try Again
+                </Button>
+              </div>
+            ) : (
+              <Countdown />
+            )}
+          </div>
+        </section>
+      )}
 
       {/* CTA Section */}
       {!isAdmin && (
@@ -535,7 +633,7 @@ export default function Problems() {
               </DialogHeader>
 
               {/* Table */}
-              <div className="mt-6 border border-border rounded-xl overflow-hidden">
+              <div className="mt-6 border border-border rounded-3xl overflow-hidden">
                 <table className="w-full border-collapse">
                   <tbody>
                     {/* ID */}

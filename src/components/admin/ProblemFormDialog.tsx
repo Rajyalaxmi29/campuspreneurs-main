@@ -71,7 +71,7 @@ export function ProblemFormDialog({
         detailed_description: problem.detailed_description || "",
         category: problem.category,
         theme: problem.theme,
-        department: problem.department || "",
+        department: (problem as any).department || "",
       });
     } else {
       setFormData({

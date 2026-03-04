@@ -40,3 +40,30 @@
 .read-the-docs {
   color: #888;
 }
+
+/* 3D Transforms */
+.preserve-3d {
+  transform-style: preserve-3d;
+  perspective: 1200px;
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+.animation-delay-100 {
+  animation-delay: 0.1s;
+}
+
+.animation-delay-200 {
+  animation-delay: 0.2s;
+}
+

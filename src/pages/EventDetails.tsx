@@ -125,16 +125,6 @@ export default function EventDetails() {
               </p>
             </div>
 
-            <Button
-              className="w-full"
-              disabled={!isRegistrationOpen}
-              variant="orange"
-              onClick={() => navigate(`/events/${id}/register`)}
-            >
-              {isRegistrationOpen
-                ? "Register for Event"
-                : "Registration Closed"}
-            </Button>
 
           </CardContent>
         </Card>

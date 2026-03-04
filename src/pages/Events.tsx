@@ -168,7 +168,8 @@ export default function EventsPage() {
             <Button
               onClick={openCreateDialog}
               className="mt-6"
-              variant="heroOutline"
+              variant="orange"
+              size="sm"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Event
@@ -177,84 +178,112 @@ export default function EventsPage() {
         </div>
       </section>
 
+
       {/* Events List */}
       <section className="py-12 lg:py-16 bg-background">
         <div className="container mx-auto px-4">
-          <div className="space-y-6">
-          {events.map((event) => (
-            <Card key={event.id} className="hover:shadow-md transition">
-              <CardContent className="p-6 flex flex-col md:flex-row gap-6">
-
-                {/* Date Column */}
-                <div className="w-full md:w-40 bg-muted rounded-lg p-4 text-center">
-                  <p className="text-lg font-bold">
-                    {formatDate(event.event_date)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatTime(event.event_date)}
-                  </p>
-                </div>
-
-                {/* Main Content */}
-                <div className="flex-1 space-y-2">
-                  <div className="flex gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {events.map((event) => (
+              <Card key={event.id} className="overflow-hidden shadow-lg hover:shadow-xl transition">
+                {/* image header */}
+                <div className="relative h-48 w-full bg-gray-100">
+                  <img
+                    src={event.image_url || "/og-image.png"}
+                    alt={event.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  {/* badges */}
+                  <div className="absolute top-2 left-2 flex flex-wrap gap-2">
                     {event.event_type && (
                       <span className="text-xs bg-primary text-white px-2 py-1 rounded">
                         {event.event_type}
                       </span>
                     )}
                     {event.mode && (
-                      <span className="text-xs bg-muted px-2 py-1 rounded">
+                      <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
                         {event.mode}
                       </span>
                     )}
                   </div>
+                </div>
 
-                  <h2 className="text-xl font-semibold">{event.title}</h2>
-                  <p className="text-muted-foreground line-clamp-2">
-                    {event.description}
-                  </p>
-
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="w-4 h-4" />
-                    {event.location}
+                <CardContent className="p-4 flex flex-col">
+                  {/* title + description */}
+                  <div className="space-y-2">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {event.title}
+                    </h2>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {event.description}
+                    </p>
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {isAdmin && (
-                    <>
+                  {/* meta & actions */}
+                  <div className="mt-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="w-4 h-4" />
+                      {formatDate(event.event_date)}
+                      <span>·</span>
+                      <Clock className="w-4 h-4" />
+                      {formatTime(event.event_date)}
+                    </div>
+                    {event.location && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4" />
+                        {event.location}
+                      </div>
+                    )}
+
+                    {/* action buttons row placed here so it's always visible */}
+                    <div className="flex items-center gap-2 pt-4 border-t border-border">
+                      {new Date(event.event_date) < new Date() ? (
+                        <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+                          Event Ended
+                        </span>
+                      ) : (
+                        <Button
+                          variant="orange"
+                          size="sm"
+                          onClick={() => navigate(`/events/${event.id}/register`)}
+                        >
+                          Register Now
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
-                        size="icon"
-                        onClick={() => openEditDialog(event)}
-                        title="Edit"
+                        size="sm"
+                        onClick={() => navigate(`/events/${event.id}`)}
                       >
-                        <Edit className="w-4 h-4" />
+                        View Details
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => openDeleteDialog(event)}
-                        title="Delete"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    variant="orange"
-                    onClick={() => navigate(`/events/${event.id}`)}
-                  >
-                    View Details
-                  </Button>
-                </div>
-
-              </CardContent>
-            </Card>
-          ))}
+                      {isAdmin && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => openEditDialog(event)}
+                            title="Edit"
+                            className="ml-auto"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => openDeleteDialog(event)}
+                            title="Delete"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
