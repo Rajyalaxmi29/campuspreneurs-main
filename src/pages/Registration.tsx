@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Registration() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +21,69 @@ export default function Registration() {
   const [problemIdError, setProblemIdError] = useState<string>("");
   const [resolvedProblemUuid, setResolvedProblemUuid] = useState<string | null>(null);
   const [isValidatingProblemId, setIsValidatingProblemId] = useState(false);
+
+  // Countdown / unlock gate (mirrors Problems.tsx)
+  const [unlockTime, setUnlockTime] = useState<Date | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchUnlockTime = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("contest_settings")
+          .select("problems_unlock_at")
+          .single();
+
+        if (error) throw error;
+
+        const unlockDate = new Date(data.problems_unlock_at);
+        setUnlockTime(unlockDate);
+
+        if (isAdmin) {
+          setIsUnlocked(true);
+          return;
+        }
+
+        const now = new Date();
+        if (now >= unlockDate) {
+          setIsUnlocked(true);
+        }
+      } catch (err: any) {
+        console.error("Error fetching unlock time:", err);
+        // If we can't fetch settings, allow access so registration isn't broken
+        setIsUnlocked(true);
+      }
+    };
+
+    fetchUnlockTime();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!unlockTime || isUnlocked) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const distance = unlockTime.getTime() - now.getTime();
+
+      if (distance < 0) {
+        clearInterval(interval);
+        setIsUnlocked(true);
+        setTimeRemaining("");
+        return;
+      }
+
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+      setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [unlockTime, isUnlocked]);
+
   const [formData, setFormData] = useState({
     teamName: "",
     member1Name: "",
@@ -276,6 +341,7 @@ export default function Registration() {
     );
   }
 
+
   return (
     <Layout>
       {/* Header */}
@@ -293,12 +359,20 @@ export default function Registration() {
       {/* Form */}
       <section className="py-16 lg:py-24 bg-background">
         <div className="container mx-auto px-4">
-          <form onSubmit={user ? handleSubmit : (e) => e.preventDefault()} className="max-w-2xl mx-auto">
+          <form onSubmit={user && isUnlocked ? handleSubmit : (e) => e.preventDefault()} className="max-w-2xl mx-auto">
+            {/* isLocked: form fields are disabled either because user is not logged in, or because registration hasn't opened yet */}
             <div className="bg-card rounded-2xl shadow-card p-8 space-y-8">
               {!user && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                   <p className="text-yellow-800 font-medium">
                     You must be logged in to register for this event.
+                  </p>
+                </div>
+              )}
+              {user && !isUnlocked && !isAdmin && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <p className="text-yellow-800 font-medium">
+                    Registration will be available after the problem statements open.
                   </p>
                 </div>
               )}
@@ -318,8 +392,8 @@ export default function Registration() {
                       required
                       value={formData.teamName}
                       onChange={handleInputChange}
-                      disabled={!user}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                       placeholder="Enter your team name"
                     />
                   </div>
@@ -344,8 +418,8 @@ export default function Registration() {
                           required
                           value={formData[`member${num}Name` as keyof typeof formData]}
                           onChange={handleInputChange}
-                          disabled={!user}
-                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                           placeholder="Full name"
                         />
                       </div>
@@ -359,8 +433,8 @@ export default function Registration() {
                           required
                           value={formData[`member${num}Roll` as keyof typeof formData]}
                           onChange={handleInputChange}
-                          disabled={!user}
-                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                           placeholder="Roll number"
                         />
                       </div>
@@ -384,8 +458,8 @@ export default function Registration() {
                       required
                       value={formData.year}
                       onChange={handleInputChange}
-                      disabled={!user}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Select Year</option>
                       <option value="1">1st Year</option>
@@ -403,8 +477,8 @@ export default function Registration() {
                       required
                       value={formData.department}
                       onChange={handleInputChange}
-                      disabled={!user}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Select Department</option>
                       <option value="AIML">AIML</option>
@@ -436,10 +510,9 @@ export default function Registration() {
                       required
                       value={formData.phone}
                       onChange={handleInputChange}
-                      disabled={!user}
-                      className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
-                        phoneError ? "border-red-500" : "border-input"
-                      } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                      className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${phoneError ? "border-red-500" : "border-input"
+                        } ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                       placeholder="10-digit mobile number"
                     />
                     {phoneError && (
@@ -456,8 +529,8 @@ export default function Registration() {
                       required
                       value={formData.email}
                       onChange={handleInputChange}
-                      disabled={!user}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                       placeholder="Team contact email"
                     />
                   </div>
@@ -479,10 +552,9 @@ export default function Registration() {
                     required
                     value={formData.problemId}
                     onChange={handleInputChange}
-                    disabled={!user}
-                    className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
-                      problemIdError ? "border-red-500" : "border-input"
-                    } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                    className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${problemIdError ? "border-red-500" : "border-input"
+                      } ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="Enter problem ID (e.g., PS001)"
                   />
                   {problemIdError && (
@@ -516,7 +588,7 @@ export default function Registration() {
                     variant="outline"
                     className="mt-4"
                     onClick={handleFileButtonClick}
-                    disabled={!user}
+                    disabled={!user || (!!user && !isUnlocked && !isAdmin)}
                   >
                     Choose Files
                   </Button>
@@ -529,17 +601,7 @@ export default function Registration() {
               </div>
 
               {/* Submit */}
-              {user ? (
-                <Button
-                  type="submit"
-                  variant="orange"
-                  size="xl"
-                  className="w-full"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Submitting..." : "Submit Registration"}
-                </Button>
-              ) : (
+              {!user ? (
                 <Button
                   type="button"
                   variant="orange"
@@ -548,6 +610,26 @@ export default function Registration() {
                   onClick={handleLoginRedirect}
                 >
                   Login to Register
+                </Button>
+              ) : user && !isUnlocked && !isAdmin ? (
+                <Button
+                  type="button"
+                  variant="orange"
+                  size="xl"
+                  className="w-full opacity-50 cursor-not-allowed"
+                  disabled
+                >
+                  Submit Registration
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  variant="orange"
+                  size="xl"
+                  className="w-full"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Submitting..." : "Submit Registration"}
                 </Button>
               )}
             </div>
