@@ -8,6 +8,25 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAdmin } from "@/hooks/useAdmin";
 import { supabase } from "@/integrations/supabase/client";
 
+// Per-member field shape
+interface MemberFields {
+  name: string;
+  roll: string;
+  year: string;
+  department: string;
+  phone: string;
+  email: string;
+}
+
+const blankMember = (): MemberFields => ({
+  name: "",
+  roll: "",
+  year: "",
+  department: "",
+  phone: "",
+  email: "",
+});
+
 export default function Registration() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -17,10 +36,13 @@ export default function Registration() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [phoneError, setPhoneError] = useState<string>("");
   const [problemIdError, setProblemIdError] = useState<string>("");
   const [resolvedProblemUuid, setResolvedProblemUuid] = useState<string | null>(null);
   const [isValidatingProblemId, setIsValidatingProblemId] = useState(false);
+  const [phoneErrors, setPhoneErrors] = useState<string[]>(["", "", "", ""]);
+
+  // Team size dropdown: 2, 3, or 4
+  const [teamSize, setTeamSize] = useState<2 | 3 | 4>(2);
 
   // Countdown / unlock gate (mirrors Problems.tsx)
   const [unlockTime, setUnlockTime] = useState<Date | null>(null);
@@ -51,7 +73,6 @@ export default function Registration() {
         }
       } catch (err: any) {
         console.error("Error fetching unlock time:", err);
-        // If we can't fetch settings, allow access so registration isn't broken
         setIsUnlocked(true);
       }
     };
@@ -84,26 +105,15 @@ export default function Registration() {
     return () => clearInterval(interval);
   }, [unlockTime, isUnlocked]);
 
-  const [formData, setFormData] = useState({
-    teamName: "",
-    member1Name: "",
-    member1Roll: "",
-    member2Name: "",
-    member2Roll: "",
-    member3Name: "",
-    member3Roll: "",
-    member4Name: "",
-    member4Roll: "",
-    year: "",
-    department: "",
-    phone: "",
-    email: "",
-    problemId: "",
-  });
+  const [teamName, setTeamName] = useState("");
+  const [members, setMembers] = useState<MemberFields[]>([
+    blankMember(),
+    blankMember(),
+    blankMember(),
+    blankMember(),
+  ]);
+  const [problemId, setProblemId] = useState("");
 
-  // No need to fetch problem IDs on mount anymore - validation is done on-demand
-
-  // Validation functions
   const validatePhone = (phone: string): string => {
     if (!phone) return "";
     if (!/^\d+$/.test(phone)) return "Phone number must contain only numeric digits.";
@@ -112,14 +122,14 @@ export default function Registration() {
     return "";
   };
 
-  const validateAndResolveProblemId = async (problemId: string): Promise<{ error: string; uuid: string | null }> => {
-    if (!problemId) return { error: "", uuid: null };
+  const validateAndResolveProblemId = async (id: string): Promise<{ error: string; uuid: string | null }> => {
+    if (!id) return { error: "", uuid: null };
 
     try {
       const { data, error } = await supabase
-        .from('problem_statements')
-        .select('id')
-        .eq('problem_statement_id', problemId)
+        .from("problem_statements")
+        .select("id")
+        .eq("problem_statement_id", id)
         .single();
 
       if (error || !data) {
@@ -128,32 +138,43 @@ export default function Registration() {
 
       return { error: "", uuid: data.id };
     } catch (error) {
-      console.error('Error validating problem ID:', error);
+      console.error("Error validating problem ID:", error);
       return { error: "Invalid Problem ID", uuid: null };
     }
   };
 
-  const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleMemberChange = (
+    index: number,
+    field: keyof MemberFields,
+    value: string
+  ) => {
+    setMembers((prev) => {
+      const updated = prev.map((m, i) => (i === index ? { ...m, [field]: value } : m));
+      return updated;
+    });
 
-    // Real-time validation
-    if (name === "phone") {
-      const error = validatePhone(value);
-      setPhoneError(error);
-    } else if (name === "problemId") {
-      setIsValidatingProblemId(true);
-      const { error, uuid } = await validateAndResolveProblemId(value);
-      setProblemIdError(error);
-      setResolvedProblemUuid(uuid);
-      setIsValidatingProblemId(false);
+    if (field === "phone") {
+      const err = validatePhone(value);
+      setPhoneErrors((prev) => {
+        const updated = [...prev];
+        updated[index] = err;
+        return updated;
+      });
     }
+  };
+
+  const handleProblemIdChange = async (value: string) => {
+    setProblemId(value);
+    setIsValidatingProblemId(true);
+    const { error, uuid } = await validateAndResolveProblemId(value);
+    setProblemIdError(error);
+    setResolvedProblemUuid(uuid);
+    setIsValidatingProblemId(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size (10MB limit)
       if (file.size > 10 * 1024 * 1024) {
         toast({
           title: "File too large",
@@ -171,41 +192,43 @@ export default function Registration() {
   };
 
   const handleLoginRedirect = () => {
-    localStorage.setItem('redirectAfterLogin', '/registration');
-    navigate('/auth');
+    localStorage.setItem("redirectAfterLogin", "/registration");
+    navigate("/auth");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate before submission
-    const phoneErr = validatePhone(formData.phone);
-    let problemIdErr = "";
-    let resolvedUuid = resolvedProblemUuid;
+    // Validate phones for active members
+    const newPhoneErrors = ["", "", "", ""];
+    let hasPhoneError = false;
+    for (let i = 0; i < teamSize; i++) {
+      const err = validatePhone(members[i].phone);
+      newPhoneErrors[i] = err;
+      if (err) hasPhoneError = true;
+    }
+    setPhoneErrors(newPhoneErrors);
+    if (hasPhoneError) return;
 
-    // If we don't have a resolved UUID, try to validate and resolve it now
-    if (!resolvedUuid && formData.problemId) {
-      const { error, uuid } = await validateAndResolveProblemId(formData.problemId);
+    // Validate problem ID
+    let resolvedUuid = resolvedProblemUuid;
+    let problemIdErr = "";
+    if (!resolvedUuid && problemId) {
+      const { error, uuid } = await validateAndResolveProblemId(problemId);
       problemIdErr = error;
       resolvedUuid = uuid;
     } else if (!resolvedUuid) {
       problemIdErr = "Invalid Problem ID";
     }
-
-    setPhoneError(phoneErr);
     setProblemIdError(problemIdErr);
-
-    if (phoneErr || problemIdErr || !resolvedUuid) {
-      return;
-    }
+    if (problemIdErr || !resolvedUuid) return;
 
     setIsLoading(true);
 
     try {
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (userError || !authUser) {
         toast({
           title: "Authentication Required",
           description: "Please log in to register your team.",
@@ -214,9 +237,9 @@ export default function Registration() {
         return;
       }
 
-      // Check if team name already exists (case insensitive)
+      // Check if team name already exists
       const { data: teamExists, error: checkError } = await supabase
-        .rpc('check_team_name_exists', { team_name_input: formData.teamName.trim() });
+        .rpc("check_team_name_exists", { team_name_input: teamName.trim() });
 
       if (checkError) {
         toast({
@@ -238,11 +261,9 @@ export default function Registration() {
 
       let documentUrl = null;
 
-      // Upload file if selected
       if (selectedFile) {
-        // Sanitize filename for storage key (remove/replace invalid characters)
-        const sanitizedFileName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const storageKey = `${user.id}_${Date.now()}_${sanitizedFileName}`;
+        const sanitizedFileName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storageKey = `${authUser.id}_${Date.now()}_${sanitizedFileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-documents")
@@ -261,25 +282,26 @@ export default function Registration() {
         documentUrl = storageKey;
       }
 
-      // Insert registration data
+      const m = members;
+
       const { error: insertError } = await supabase
-        .from('team_registrations')
+        .from("team_registrations")
         .insert({
-          user_id: user.id,
-          team_name: formData.teamName,
-          problem_id: formData.problemId, // Use the problem_statement_id string
-          member1_name: formData.member1Name,
-          member1_roll: formData.member1Roll,
-          member2_name: formData.member2Name || null,
-          member2_roll: formData.member2Roll || null,
-          member3_name: formData.member3Name || null,
-          member3_roll: formData.member3Roll || null,
-          member4_name: formData.member4Name || null,
-          member4_roll: formData.member4Roll || null,
-          year: formData.year,
-          department: formData.department,
-          phone: formData.phone,
-          email: formData.email,
+          user_id: authUser.id,
+          team_name: teamName,
+          problem_id: problemId,
+          member1_name: m[0].name,
+          member1_roll: m[0].roll,
+          member2_name: teamSize >= 2 ? m[1].name || null : null,
+          member2_roll: teamSize >= 2 ? m[1].roll || null : null,
+          member3_name: teamSize >= 3 ? m[2].name || null : null,
+          member3_roll: teamSize >= 3 ? m[2].roll || null : null,
+          member4_name: teamSize >= 4 ? m[3].name || null : null,
+          member4_roll: teamSize >= 4 ? m[3].roll || null : null,
+          year: m[0].year,
+          department: m[0].department,
+          phone: m[0].phone,
+          email: m[0].email,
           document_url: documentUrl,
           document_filename: selectedFile ? selectedFile.name : null,
         });
@@ -293,13 +315,11 @@ export default function Registration() {
         return;
       }
 
-      // Success
       setIsSubmitted(true);
       toast({
         title: "Registration Successful!",
         description: "Your team has been registered for Incamp Chapter 1.",
       });
-
     } catch (error) {
       toast({
         title: "Error",
@@ -341,6 +361,11 @@ export default function Registration() {
     );
   }
 
+  const isLocked = !user || (!!user && !isUnlocked && !isAdmin);
+  const inputClass = (extra = "") =>
+    `w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${isLocked ? "opacity-50 cursor-not-allowed" : ""} ${extra}`;
+
+  const memberNums = Array.from({ length: teamSize }, (_, i) => i);
 
   return (
     <Layout>
@@ -359,23 +384,28 @@ export default function Registration() {
       {/* Form */}
       <section className="py-16 lg:py-24 bg-background">
         <div className="container mx-auto px-4">
-          <form onSubmit={user && isUnlocked ? handleSubmit : (e) => e.preventDefault()} className="max-w-2xl mx-auto">
-            {/* isLocked: form fields are disabled either because user is not logged in, or because registration hasn't opened yet */}
+          <form
+            onSubmit={user && isUnlocked ? handleSubmit : (e) => e.preventDefault()}
+            className="max-w-2xl mx-auto"
+          >
             <div className="bg-card rounded-2xl shadow-card p-8 space-y-8">
+              {/* Alerts */}
               {!user && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800 font-medium">
                     You must be logged in to register for this event.
                   </p>
                 </div>
               )}
               {user && !isUnlocked && !isAdmin && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800 font-medium">
                     Registration will be available after the problem statements open.
+                    {timeRemaining && ` Opens in: ${timeRemaining}`}
                   </p>
                 </div>
               )}
+
               {/* Team Info */}
               <div>
                 <h3 className="font-poppins font-semibold text-lg text-foreground border-b border-border pb-3 mb-6">
@@ -388,152 +418,158 @@ export default function Registration() {
                     </label>
                     <input
                       type="text"
-                      name="teamName"
                       required
-                      value={formData.teamName}
-                      onChange={handleInputChange}
-                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
+                      disabled={isLocked}
+                      className={inputClass()}
                       placeholder="Enter your team name"
                     />
                   </div>
+
+                  {/* Team Size Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Number of Team Members *
+                    </label>
+                    <select
+                      value={teamSize}
+                      onChange={(e) => setTeamSize(Number(e.target.value) as 2 | 3 | 4)}
+                      disabled={isLocked}
+                      className={inputClass()}
+                    >
+                      <option value={2}>2 Members</option>
+                      <option value={3}>3 Members</option>
+                      <option value={4}>4 Members</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Team Members */}
+              {/* Team Members — one full block per member */}
               <div>
                 <h3 className="font-poppins font-semibold text-lg text-foreground border-b border-border pb-3 mb-6">
-                  Team Members Details
+                  Team Member Details
                 </h3>
-                <div className="space-y-6">
-                  {[1, 2, 3, 4].map((num) => (
-                    <div key={num} className="grid sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          Member {num} Name *
-                        </label>
-                        <input
-                          type="text"
-                          name={`member${num}Name`}
-                          required
-                          value={formData[`member${num}Name` as keyof typeof formData]}
-                          onChange={handleInputChange}
-                          disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          placeholder="Full name"
-                        />
+                <div className="space-y-8">
+                  {memberNums.map((i) => (
+                    <div key={i} className="rounded-xl border border-border p-5 space-y-4">
+                      <h4 className="font-poppins font-semibold text-base text-foreground">
+                        Member {i + 1} Details
+                      </h4>
+
+                      {/* Name & Roll */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={members[i].name}
+                            onChange={(e) => handleMemberChange(i, "name", e.target.value)}
+                            disabled={isLocked}
+                            className={inputClass()}
+                            placeholder="Full name"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Roll Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={members[i].roll}
+                            onChange={(e) => handleMemberChange(i, "roll", e.target.value)}
+                            disabled={isLocked}
+                            className={inputClass()}
+                            placeholder="Roll number"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-2">
-                          Roll Number *
-                        </label>
-                        <input
-                          type="text"
-                          name={`member${num}Roll`}
-                          required
-                          value={formData[`member${num}Roll` as keyof typeof formData]}
-                          onChange={handleInputChange}
-                          disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                          className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          placeholder="Roll number"
-                        />
+
+                      {/* Year & Department */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Year *
+                          </label>
+                          <select
+                            required
+                            value={members[i].year}
+                            onChange={(e) => handleMemberChange(i, "year", e.target.value)}
+                            disabled={isLocked}
+                            className={inputClass()}
+                          >
+                            <option value="">Select Year</option>
+                            <option value="1">1st Year</option>
+                            <option value="2">2nd Year</option>
+                            <option value="3">3rd Year</option>
+                            <option value="4">4th Year</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Department *
+                          </label>
+                          <select
+                            required
+                            value={members[i].department}
+                            onChange={(e) => handleMemberChange(i, "department", e.target.value)}
+                            disabled={isLocked}
+                            className={inputClass()}
+                          >
+                            <option value="">Select Department</option>
+                            <option value="AIML">AIML</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EEE">EEE</option>
+                            <option value="MECH">MECH</option>
+                            <option value="CIVIL">CIVIL</option>
+                            <option value="MBA">MBA</option>
+                            <option value="PHARMACY">PHARMACY</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Phone & Email */}
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Phone Number *
+                          </label>
+                          <input
+                            type="tel"
+                            required
+                            value={members[i].phone}
+                            onChange={(e) => handleMemberChange(i, "phone", e.target.value)}
+                            disabled={isLocked}
+                            className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${phoneErrors[i] ? "border-red-500" : "border-input"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                            placeholder="10-digit mobile number"
+                          />
+                          {phoneErrors[i] && (
+                            <p className="text-red-500 text-sm mt-1">{phoneErrors[i]}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Email *
+                          </label>
+                          <input
+                            type="email"
+                            required
+                            value={members[i].email}
+                            onChange={(e) => handleMemberChange(i, "email", e.target.value)}
+                            disabled={isLocked}
+                            className={inputClass()}
+                            placeholder="Email address"
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Academic Info */}
-              <div>
-                <h3 className="font-poppins font-semibold text-lg text-foreground border-b border-border pb-3 mb-6">
-                  Academic Details
-                </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Year *
-                    </label>
-                    <select
-                      name="year"
-                      required
-                      value={formData.year}
-                      onChange={handleInputChange}
-                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">Select Year</option>
-                      <option value="1">1st Year</option>
-                      <option value="2">2nd Year</option>
-                      <option value="3">3rd Year</option>
-                      <option value="4">4th Year</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Department *
-                    </label>
-                    <select
-                      name="department"
-                      required
-                      value={formData.department}
-                      onChange={handleInputChange}
-                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <option value="">Select Department</option>
-                      <option value="AIML">AIML</option>
-                      <option value="CSE">CSE</option>
-                      <option value="ECE">ECE</option>
-                      <option value="EEE">EEE</option>
-                      <option value="MECH">MECH</option>
-                      <option value="CIVIL">CIVIL</option>
-                      <option value="MBA">MBA</option>
-                      <option value="PHARMACY">PHARMACY</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact Info */}
-              <div>
-                <h3 className="font-poppins font-semibold text-lg text-foreground border-b border-border pb-3 mb-6">
-                  Contact Information
-                </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      required
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                      className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${phoneError ? "border-red-500" : "border-input"
-                        } ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      placeholder="10-digit mobile number"
-                    />
-                    {phoneError && (
-                      <p className="text-red-500 text-sm mt-1">{phoneError}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      required
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                      className={`w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      placeholder="Team contact email"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -548,13 +584,11 @@ export default function Registration() {
                   </label>
                   <input
                     type="text"
-                    name="problemId"
                     required
-                    value={formData.problemId}
-                    onChange={handleInputChange}
-                    disabled={!user || (!!user && !isUnlocked && !isAdmin)}
-                    className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${problemIdError ? "border-red-500" : "border-input"
-                      } ${(!user || (!!user && !isUnlocked && !isAdmin)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    value={problemId}
+                    onChange={(e) => handleProblemIdChange(e.target.value)}
+                    disabled={isLocked}
+                    className={`w-full px-4 py-3 rounded-lg border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${problemIdError ? "border-red-500" : "border-input"} ${isLocked ? "opacity-50 cursor-not-allowed" : ""}`}
                     placeholder="Enter problem ID (e.g., PS001)"
                   />
                   {problemIdError && (
@@ -588,7 +622,7 @@ export default function Registration() {
                     variant="outline"
                     className="mt-4"
                     onClick={handleFileButtonClick}
-                    disabled={!user || (!!user && !isUnlocked && !isAdmin)}
+                    disabled={isLocked}
                   >
                     Choose Files
                   </Button>
@@ -639,4 +673,3 @@ export default function Registration() {
     </Layout>
   );
 }
-
