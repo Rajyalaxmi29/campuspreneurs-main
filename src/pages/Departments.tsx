@@ -26,7 +26,7 @@ interface ProblemRow {
 export default function DepartmentsPage() {
   const [grouped, setGrouped] = useState<Record<string, Record<string, Record<string, ProblemRow[]>>>>({});
   const [departments, setDepartments] = useState<string[]>([]);
-  const [primaryThemeForDept, setPrimaryThemeForDept] = useState<Record<string, string>>({});
+
   const [loading, setLoading] = useState(true);
   const [selectedTheme, setSelectedTheme] = useState<string>("All");
   const [selectedDept, setSelectedDept] = useState<string>("All");
@@ -67,8 +67,6 @@ export default function DepartmentsPage() {
     setDepartments(deps);
 
     const map: Record<string, Record<string, Record<string, ProblemRow[]>>> = {};
-    const deptThemeCounts: Record<string, Record<string, number>> = {};
-
     (problemsData || []).forEach((p: any) => {
       const theme = (p.theme || "Other").toString();
       const dept = (p.department || "Uncategorized").toString();
@@ -78,38 +76,8 @@ export default function DepartmentsPage() {
       map[theme][dept] = map[theme][dept] || {};
       map[theme][dept][cat] = map[theme][dept][cat] || [];
       map[theme][dept][cat].push(p);
-
-      deptThemeCounts[dept] = deptThemeCounts[dept] || {};
-      deptThemeCounts[dept][theme] = (deptThemeCounts[dept][theme] || 0) + 1;
     });
 
-    const nextPrimaryThemeForDept: Record<string, string> = {};
-    deps.forEach((d) => {
-      const counts = deptThemeCounts[d] || {};
-      if ((counts["Academic"] || 0) > 0) {
-        nextPrimaryThemeForDept[d] = "Academic";
-        return;
-      }
-
-      const themeEntries = Object.entries(counts);
-      if (themeEntries.length === 0) {
-        nextPrimaryThemeForDept[d] = "Other";
-        return;
-      }
-
-      let bestTheme = themeEntries[0][0];
-      let bestCount = themeEntries[0][1] as number;
-      themeEntries.forEach(([t, c]) => {
-        if ((c as number) > bestCount) {
-          bestCount = c as number;
-          bestTheme = t;
-        }
-      });
-
-      nextPrimaryThemeForDept[d] = bestTheme;
-    });
-
-    setPrimaryThemeForDept(nextPrimaryThemeForDept);
     setGrouped(map);
     setLoading(false);
   };
@@ -295,22 +263,13 @@ export default function DepartmentsPage() {
                 if (selectedTheme !== "All" && theme !== selectedTheme) return null;
 
                 const deptsMap = grouped[theme] || {};
-                const deptSetForTheme = new Set<string>();
 
-                Object.keys(deptsMap).forEach((d) => {
-                  if (!primaryThemeForDept[d] || primaryThemeForDept[d] === theme) deptSetForTheme.add(d);
-                });
-
-                departments.forEach((d) => {
-                  if (primaryThemeForDept[d] === theme) deptSetForTheme.add(d);
-                });
-
-                let deptKeys = Array.from(deptSetForTheme).sort();
+                let deptKeys = Object.keys(deptsMap).sort();
                 if (selectedDept !== "All") {
                   deptKeys = deptKeys.filter((dept) => dept === selectedDept);
                 }
 
-                if (deptKeys.length === 0 || deptKeys.every((dept) => !deptsMap[dept])) return null;
+                if (deptKeys.length === 0) return null;
 
                 return (
                   <section key={theme} className="bg-card rounded-xl border border-border p-6">
