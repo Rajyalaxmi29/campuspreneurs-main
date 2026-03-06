@@ -158,11 +158,14 @@ export default function DepartmentsPage() {
 
       const { error: remarkError } = await (supabase as any)
         .from("problem_statement_remarks")
-        .insert({
-          problem_statement_id: rejectingProblem.id,
-          remark: remarkText,
-          author_id: userId,
-        });
+        .upsert(
+          {
+            problem_statement_id: rejectingProblem.id,
+            remark: remarkText,
+            author_id: userId,
+          },
+          { onConflict: "problem_statement_id" }
+        );
 
       if (remarkError) throw remarkError;
 
