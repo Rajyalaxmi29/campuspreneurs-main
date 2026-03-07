@@ -38,6 +38,7 @@ export default function Registration() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [problemIdError, setProblemIdError] = useState<string>("");
   const [resolvedProblemUuid, setResolvedProblemUuid] = useState<string | null>(null);
+  const [problemLimitInfo, setProblemLimitInfo] = useState<{ max: number | null; curr: number } | null>(null);
   const [isValidatingProblemId, setIsValidatingProblemId] = useState(false);
   const [phoneErrors, setPhoneErrors] = useState<string[]>(["", "", "", ""]);
 
@@ -128,17 +129,23 @@ export default function Registration() {
     try {
       const { data, error } = await supabase
         .from("problem_statements")
-        .select("id")
+        .select("id, max_registrations, curr_registrations")
         .eq("problem_statement_id", id)
         .single();
 
       if (error || !data) {
+        setProblemLimitInfo(null);
         return { error: "Invalid Problem ID", uuid: null };
       }
 
+      setProblemLimitInfo({
+        max: (data as any).max_registrations ?? null,
+        curr: (data as any).curr_registrations ?? 0,
+      });
       return { error: "", uuid: data.id };
     } catch (error) {
       console.error("Error validating problem ID:", error);
+      setProblemLimitInfo(null);
       return { error: "Invalid Problem ID", uuid: null };
     }
   };
@@ -165,6 +172,7 @@ export default function Registration() {
 
   const handleProblemIdChange = async (value: string) => {
     setProblemId(value);
+    setProblemLimitInfo(null);
     setIsValidatingProblemId(true);
     const { error, uuid } = await validateAndResolveProblemId(value);
     setProblemIdError(error);
@@ -222,6 +230,26 @@ export default function Registration() {
     }
     setProblemIdError(problemIdErr);
     if (problemIdErr || !resolvedUuid) return;
+
+    // Re-fetch live limit from DB right before submitting (avoids stale cached state)
+    const { data: livePS } = await supabase
+      .from("problem_statements")
+      .select("max_registrations, curr_registrations")
+      .eq("id", resolvedUuid)
+      .single();
+
+    if (livePS) {
+      const max = (livePS as any).max_registrations;
+      const curr = (livePS as any).curr_registrations ?? 0;
+      if (max !== null && max !== undefined && curr >= max) {
+        toast({
+          title: "Registrations Full",
+          description: "This problem statement has reached its maximum number of registrations.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     setIsLoading(true);
 

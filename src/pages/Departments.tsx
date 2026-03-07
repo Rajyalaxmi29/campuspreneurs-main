@@ -42,6 +42,10 @@ export default function DepartmentsPage() {
   const [remarkText, setRemarkText] = useState("");
   const [rejectingProblem, setRejectingProblem] = useState<ProblemRow | null>(null);
 
+  const [acceptOpen, setAcceptOpen] = useState(false);
+  const [acceptingProblem, setAcceptingProblem] = useState<ProblemRow | null>(null);
+  const [limitValue, setLimitValue] = useState<string>("");
+
   const fetch = async () => {
     setLoading(true);
     const [{ data: problemsData, error: problemsError }, { data: regsData }] = await Promise.all([
@@ -150,6 +154,34 @@ export default function DepartmentsPage() {
       fetch();
     } catch (err: any) {
       toast.error(err.message || "Failed to reject problem");
+    }
+  };
+
+  const openAcceptDialog = (p: ProblemRow) => {
+    setAcceptingProblem(p);
+    setLimitValue("");
+    setAcceptOpen(true);
+  };
+
+  const handleAccept = async () => {
+    if (!acceptingProblem) return;
+    const limit = parseInt(limitValue, 10);
+    if (!limitValue.trim() || isNaN(limit) || limit < 1) {
+      toast.error("Please enter a valid registration limit (minimum 1)");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("problem_statements")
+        .update({ status: "approved", approved_at: new Date().toISOString(), max_registrations: limit } as any)
+        .eq("id", acceptingProblem.id);
+      if (error) throw error;
+      toast.success("Problem accepted");
+      setAcceptOpen(false);
+      setAcceptingProblem(null);
+      fetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept problem");
     }
   };
 
@@ -343,7 +375,7 @@ export default function DepartmentsPage() {
                                               <Button
                                                 size="sm"
                                                 className="bg-green-600 hover:bg-green-700 text-white"
-                                                onClick={() => handleStatus(p.id, "approved")}
+                                                onClick={() => openAcceptDialog(p)}
                                               >
                                                 <Check className="w-4 h-4 mr-1" />
                                                 Accept
@@ -378,6 +410,36 @@ export default function DepartmentsPage() {
                 );
               });
             })()}
+          </div>
+        )}
+
+        {acceptOpen && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-card text-card-foreground rounded-lg border border-border p-6 w-[380px] space-y-4 shadow-lg">
+              <h2 className="text-lg font-semibold">Set Registration Limit</h2>
+              <p className="text-sm text-muted-foreground">
+                Enter the maximum number of team registrations allowed for this problem statement.
+              </p>
+              <input
+                type="number"
+                min={1}
+                className="w-full border border-border rounded-md p-3 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. 10"
+                value={limitValue}
+                onChange={(e) => setLimitValue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAccept()}
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setAcceptOpen(false)}>
+                  Cancel
+                </Button>
+                <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleAccept}>
+                  <Check className="w-4 h-4 mr-1" />
+                  Accept
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

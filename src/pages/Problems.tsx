@@ -46,6 +46,8 @@ interface ProblemStatement {
   status: string | null;
   created_at: string;
   approved_at?: string;
+  max_registrations?: number | null;
+  curr_registrations?: number | null;
 }
 
 export default function Problems() {
@@ -274,16 +276,22 @@ export default function Problems() {
   const normalize = (value: string | null | undefined) => (value ?? "").toLowerCase();
   const normalizedSearch = normalize(searchQuery);
 
-  const filteredProblems = problems.filter((problem) => {
-    const matchesTheme = activeTheme === "All" || problem.theme === activeTheme;
-    const matchesSearch =
-      normalize(problem.title).includes(normalizedSearch) ||
-      normalize(problem.description).includes(normalizedSearch) ||
-      normalize(problem.problem_statement_id).includes(normalizedSearch) ||
-      normalize(problem.category).includes(normalizedSearch) ||
-      normalize(problem.department).includes(normalizedSearch);
-    return matchesTheme && matchesSearch;
-  });
+  const filteredProblems = problems
+    .filter((problem) => {
+      const matchesTheme = activeTheme === "All" || problem.theme === activeTheme;
+      const matchesSearch =
+        normalize(problem.title).includes(normalizedSearch) ||
+        normalize(problem.description).includes(normalizedSearch) ||
+        normalize(problem.problem_statement_id).includes(normalizedSearch) ||
+        normalize(problem.category).includes(normalizedSearch) ||
+        normalize(problem.department).includes(normalizedSearch);
+      return matchesTheme && matchesSearch;
+    })
+    .sort((a, b) => {
+      const aFull = a.max_registrations != null && (a.curr_registrations ?? 0) >= a.max_registrations;
+      const bFull = b.max_registrations != null && (b.curr_registrations ?? 0) >= b.max_registrations;
+      return Number(aFull) - Number(bFull);
+    });
 
   const getThemeColor = (theme: string) => {
     switch (theme) {
@@ -495,7 +503,7 @@ export default function Problems() {
                           </div>
 
                           {/* Actions */}
-                          <div className="lg:w-auto p-4 lg:p-6 flex items-center justify-center gap-2 border-t lg:border-t-0 lg:border-l border-border bg-highlight/50">
+                          <div className="lg:w-auto p-4 lg:p-6 flex flex-col items-center justify-center gap-2 border-t lg:border-t-0 lg:border-l border-border bg-highlight/50">
                             {isAdmin && (
                               <>
                                 <Button
@@ -516,6 +524,16 @@ export default function Problems() {
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
                               </>
+                            )}
+                            {problem.max_registrations != null && (
+                              <span
+                                className={`text-xs font-semibold px-2 py-1 rounded-full ${(problem.curr_registrations ?? 0) >= problem.max_registrations
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-green-100 text-green-700"
+                                  }`}
+                              >
+                                {problem.curr_registrations ?? 0}/{problem.max_registrations} Registrations
+                              </span>
                             )}
                             <Button
                               size="sm"
