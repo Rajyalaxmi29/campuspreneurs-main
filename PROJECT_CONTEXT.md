@@ -1,7 +1,7 @@
-# Project Context Document: Campuspreneurs (Incamp Chapter 1)
+# Project Context Document: Campuspreneurs (inCamp Chapter 1)
 
 ## 1. Project Overview
-**Campuspreneurs (Incamp Chapter 1)** is a platform designed to manage a campus-wide problem-solving event or hackathon. It allows students to browse real-world "problem statements," form teams, and register their solutions. Administrators can manage the problem statements, track registrations, and review pending_review documents.
+**Campuspreneurs (inCamp Chapter 1)** is a platform designed to manage a campus-wide problem-solving event or hackathon. It allows students to browse real-world "problem statements," form teams, and register their solutions. Administrators can manage the problem statements, track registrations, and review pending_review documents.
 
 - **Target Users:** 
   - Students (participants)

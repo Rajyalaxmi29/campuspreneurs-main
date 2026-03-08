@@ -54,7 +54,7 @@ export function HeroSection({ frontImage, backImage }: { frontImage: string; bac
             </div>
             
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-poppins font-bold text-primary-foreground leading-tight animate-fade-in-up">
-              Incamp
+              inCamp
             </h1>
             
             <p className="text-xl md:text-2xl text-primary-foreground/90 font-light animate-fade-in-up animation-delay-100">

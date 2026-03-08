@@ -493,7 +493,7 @@ export default function AdminDashboard() {
             Admin Dashboard
           </h1>
           <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
-            Overview of Incamp statistics and management tools.
+            Overview of inCamp statistics and management tools.
           </p>
         </div>
       </section>

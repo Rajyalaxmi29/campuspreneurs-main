@@ -7,7 +7,7 @@ const departments = [
 const teamBlocks = [
   {
     title: "Geenovate Foundation",
-    description: "The driving force behind Incamp, fostering innovation and entrepreneurship across GCET.",
+    description: "The driving force behind inCamp, fostering innovation and entrepreneurship across GCET.",
     icon: Building2,
   },
   {
@@ -46,7 +46,7 @@ export function TeamSection() {
             The Team
           </span>
           <h2 className="mt-3 text-3xl lg:text-4xl font-poppins font-bold text-foreground">
-            Behind Incamp
+            Behind inCamp
           </h2>
         </div>
 

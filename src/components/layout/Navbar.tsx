@@ -41,11 +41,11 @@ export function Navbar() {
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <img
               src="/favicon.png"
-              alt="Incamp Logo"
+              alt="inCamp Logo"
               className="w-9 h-9 rounded-lg"
             />
             <span className="font-semibold text-lg hidden sm:block">
-              Incamp
+              inCamp
             </span>
           </Link>
 

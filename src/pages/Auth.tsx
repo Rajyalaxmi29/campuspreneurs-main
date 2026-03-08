@@ -276,7 +276,7 @@ export default function Auth() {
               <p className="mt-2 text-muted-foreground">
                 {isLogin
                   ? "Sign in to access problem statements and register your team"
-                  : "Join Incamp and start solving real-world problems"}
+                  : "Join inCamp and start solving real-world problems"}
               </p>
             </div>
 
