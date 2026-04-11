@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ interface Resource {
 interface ResourceUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  resource: Resource | null;
+  resource?: Resource | null;
   onSuccess: () => void;
 }
 
@@ -30,11 +30,20 @@ export function ResourceUploadDialog({
   resource,
   onSuccess,
 }: ResourceUploadDialogProps) {
+  const isEditMode = Boolean(resource);
   const [title, setTitle] = useState(resource?.title || "");
   const [description, setDescription] = useState(resource?.description || "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTitle(resource?.title || "");
+      setDescription(resource?.description || "");
+      setFile(null);
+    }
+  }, [open, resource]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -42,76 +51,94 @@ export function ResourceUploadDialog({
     }
   };
 
+  const generateSectionKey = (text: string) => {
+    const slug = text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+    return slug || `resource_${Date.now()}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resource) return;
+    if (!title.trim()) {
+      toast.error("Please provide a title for the resource.");
+      return;
+    }
 
     setUploading(true);
 
     try {
-      let fileUrl = resource.file_url;
-      let fileType = resource.file_type;
+      let fileUrl = resource?.file_url || null;
+      let fileType = resource?.file_type || null;
 
-      // Upload new file if selected
       if (file) {
-        // Sanitize filename for storage key (remove/replace invalid characters)
-        const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const storageKey = `${resource.section_key}_${Date.now()}_${sanitizedFileName}`;
+        const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storageKey = `${generateSectionKey(title)}_${Date.now()}_${sanitizedFileName}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("resources")
           .upload(storageKey, file, { upsert: true });
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage
+        const { data: urlData, error: urlError } = supabase.storage
           .from("resources")
           .getPublicUrl(storageKey);
 
+        if (urlError) throw urlError;
+
         fileUrl = urlData.publicUrl;
-        fileType = file.name; // Store original filename in database
+        fileType = file.name;
       }
 
-      // Update resource record
-      const { error: updateError } = await supabase
-        .from("resources")
-        .update({
-          title,
-          description,
-          file_url: fileUrl,
-          file_type: fileType,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", resource.id);
+      if (isEditMode && resource) {
+        const { error: updateError } = await supabase
+          .from("resources")
+          .update({
+            title,
+            description,
+            file_url: fileUrl,
+            file_type: fileType,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resource.id);
 
-      if (updateError) throw updateError;
+        if (updateError) throw updateError;
+        toast.success("Resource updated successfully");
+      } else {
+        const sectionKey = generateSectionKey(title);
+        const { error: insertError } = await supabase.from("resources").insert([
+          {
+            title,
+            description,
+            file_url: fileUrl,
+            file_type: fileType,
+            section_key: sectionKey,
+            updated_at: new Date().toISOString(),
+          },
+        ]);
 
-      toast.success("Resource updated successfully");
+        if (insertError) throw insertError;
+        toast.success("Resource added successfully");
+      }
+
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      console.error("Error updating resource:", error);
-      toast.error(error.message || "Failed to update resource");
+      console.error("Error saving resource:", error);
+      toast.error(error.message || "Failed to save resource");
     } finally {
       setUploading(false);
     }
   };
 
-  // Reset form when dialog opens with new resource
-  const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen && resource) {
-      setTitle(resource.title);
-      setDescription(resource.description || "");
-      setFile(null);
-    }
-    onOpenChange(isOpen);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Update Resource</DialogTitle>
+          <DialogTitle>{isEditMode ? "Update Resource" : "Add Resource"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -137,7 +164,7 @@ export function ResourceUploadDialog({
             <div className="mt-2">
               {resource?.file_url && !file && (
                 <p className="text-sm text-muted-foreground mb-2">
-                  Current: {resource.file_type} file
+                  Current: {resource.file_type || "Uploaded"}
                 </p>
               )}
               {file && (
@@ -167,7 +194,7 @@ export function ResourceUploadDialog({
                 className="w-full"
               >
                 <Upload className="w-4 h-4 mr-2" />
-                {file ? "Change File" : "Upload New File"}
+                {file ? "Change File" : "Upload File"}
               </Button>
             </div>
           </div>
@@ -176,7 +203,7 @@ export function ResourceUploadDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={uploading}>
-              {uploading ? "Uploading..." : "Save Changes"}
+              {uploading ? "Saving..." : isEditMode ? "Save Changes" : "Create Resource"}
             </Button>
           </div>
         </form>

@@ -7,7 +7,7 @@ import { CTASection } from "@/components/home/CTASection";
 const Index = () => {
   return (
     <Layout>
-      <HeroSection frontImage="/front.png" backImage="/back.png" />
+      <HeroSection />
       <EventsCarousel />
       <TimelineSection />
       <CTASection />

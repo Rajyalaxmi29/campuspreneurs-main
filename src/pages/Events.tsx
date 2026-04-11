@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, MapPin, Plus, Edit, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar, Clock, MapPin, Plus, Edit, Trash2, Save, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -26,9 +28,24 @@ interface Event {
   image_url?: string | null;
 }
 
+interface PageTextContent {
+  title: string;
+  subtitle: string;
+}
+
+const defaultPageText: PageTextContent = {
+  title: "Events",
+  subtitle:
+    "Stay updated with the latest workshops, seminars, and competitions happening on campus. Join us to learn, network, and innovate together.",
+};
+
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageText, setPageText] = useState<PageTextContent>(defaultPageText);
+  const [editPageText, setEditPageText] = useState<PageTextContent>(defaultPageText);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerSaving, setHeaderSaving] = useState(false);
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
 
@@ -40,6 +57,7 @@ export default function EventsPage() {
 
   useEffect(() => {
     fetchEvents();
+    fetchPageText();
   }, []);
 
   const fetchEvents = async () => {
@@ -50,6 +68,49 @@ export default function EventsPage() {
 
     if (!error && data) setEvents(data as Event[]);
     setLoading(false);
+  };
+
+  const fetchPageText = async () => {
+    try {
+      const { data } = await supabase
+        .from("page_content")
+        .select("*")
+        .eq("page_name", "events")
+        .eq("section_key", "page_header");
+
+      if (data && data.length > 0) {
+        const row = data[0];
+        const parsed = typeof row.content === "string" ? JSON.parse(row.content) : row.content;
+        setPageText(parsed);
+        setEditPageText(parsed);
+      }
+    } catch (error) {
+      console.error("Failed to load events page header:", error);
+    }
+  };
+
+  const savePageText = async () => {
+    setHeaderSaving(true);
+    try {
+      const entry = {
+        page_name: "events",
+        section_key: "page_header",
+        content: editPageText,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("page_content").upsert([entry], {
+        onConflict: ["page_name", "section_key"],
+      });
+      if (error) throw error;
+      setPageText(editPageText);
+      setEditingHeader(false);
+      toast.success("Events page text updated.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to save page text.");
+    } finally {
+      setHeaderSaving(false);
+    }
   };
 
   const handleSave = async (data: Omit<Event, "id" | "created_at" | "updated_at">) => {
@@ -148,12 +209,33 @@ export default function EventsPage() {
       {/* Header */}
       <section className="bg-primary py-16 lg:py-24">
         <div className="container mx-auto px-4 text-center">
-          <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground">
-            Events
-          </h1>
-          <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
-            Stay updated with the latest workshops, seminars, and competitions happening on campus. Join us to learn, network, and innovate together.
-          </p>
+          {editingHeader ? (
+            <div className="max-w-3xl mx-auto">
+              <div className="space-y-4 rounded-[2rem] border border-white/20 bg-white/95 p-8 shadow-[0_24px_60px_rgba(15,23,42,0.16)]">
+                <Input
+                  value={editPageText.title}
+                  onChange={(e) => setEditPageText({ ...editPageText, title: e.target.value })}
+                  className="bg-white text-foreground text-2xl lg:text-4xl font-poppins font-bold"
+                  placeholder="Page title"
+                />
+                <Textarea
+                  value={editPageText.subtitle}
+                  onChange={(e) => setEditPageText({ ...editPageText, subtitle: e.target.value })}
+                  className="min-h-[140px] bg-white text-foreground"
+                  placeholder="Page subtitle"
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground">
+                {pageText.title}
+              </h1>
+              <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
+                {pageText.subtitle}
+              </p>
+            </>
+          )}
           <div className="mt-6 flex justify-center gap-8 text-primary-foreground">
             <div className="text-center">
               <span className="text-3xl font-bold">{totalEvents}</span>
@@ -165,15 +247,50 @@ export default function EventsPage() {
             </div>
           </div>
           {isAdmin && (
-            <Button
-              onClick={openCreateDialog}
-              className="mt-6"
-              variant="orange"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Event
-            </Button>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              {editingHeader ? (
+                <>
+                  <Button
+                    onClick={savePageText}
+                    disabled={headerSaving}
+                    variant="orange"
+                    size="sm"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {headerSaving ? "Saving..." : "Save Page Text"}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setEditingHeader(false);
+                      setEditPageText(pageText);
+                    }}
+                    variant="orange"
+                    size="sm"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => setEditingHeader(true)}
+                  variant="orange"
+                  size="sm"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Page Text
+                </Button>
+              )}
+              <Button
+                onClick={openCreateDialog}
+                className="mt-2 sm:mt-0"
+                variant="orange"
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Event
+              </Button>
+            </div>
           )}
         </div>
       </section>
