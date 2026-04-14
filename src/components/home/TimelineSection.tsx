@@ -26,6 +26,7 @@ interface TimelineCard {
   title: string;
   description: string;
   icon_url?: string | null;
+  image_urls?: string[];
 }
 
 interface TimelineHeader {
@@ -33,6 +34,7 @@ interface TimelineHeader {
   title: string;
   subtitle: string;
   photo_url?: string | null;
+  photo_urls?: string[];
 }
 
 const fallbackIcons = [Target, Users, Rocket, Check, Award];
@@ -42,6 +44,7 @@ const defaultTimelineHeader: TimelineHeader = {
   title: "Your Path to Innovation",
   subtitle: "",
   photo_url: null,
+  photo_urls: [],
 };
 
 const defaultTimelineCards: TimelineCard[] = [
@@ -50,30 +53,35 @@ const defaultTimelineCards: TimelineCard[] = [
     name: "Phase 0",
     title: "Problem Discovery",
     description: "Identify and document real campus challenges through observation and research.",
+    image_urls: [],
   },
   {
     id: "phase-1",
     name: "Phase 1",
     title: "Team Formation & Registration",
     description: "Form cross-functional teams and register with your chosen problem statement.",
+    image_urls: [],
   },
   {
     id: "phase-2",
     name: "Phase 2",
     title: "Solution Ideation",
     description: "Brainstorm, validate, and refine your innovative solution approach.",
+    image_urls: [],
   },
   {
     id: "phase-3",
     name: "Phase 3",
     title: "Prototype Development",
     description: "Build working prototypes and prepare comprehensive documentation.",
+    image_urls: [],
   },
   {
     id: "phase-4",
     name: "Phase 4",
     title: "Final Pitch & Evaluation",
     description: "Present your solution to the jury and compete for recognition and prizes.",
+    image_urls: [],
   },
 ];
 
@@ -87,6 +95,7 @@ export function TimelineSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingIconId, setUploadingIconId] = useState<string | null>(null);
+  const [uploadingCardPhotosId, setUploadingCardPhotosId] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
 
   useEffect(() => {
@@ -110,8 +119,12 @@ export function TimelineSection() {
 
         if (!cardError && cardData?.content) {
           const parsed = typeof cardData.content === "string" ? JSON.parse(cardData.content) : cardData.content;
-          setCards(parsed);
-          setEditCards(parsed);
+          const normalized = (parsed as TimelineCard[]).map((card) => ({
+            ...card,
+            image_urls: card.image_urls ?? [],
+          }));
+          setCards(normalized);
+          setEditCards(normalized);
         } else {
           setCards(defaultTimelineCards);
           setEditCards(defaultTimelineCards);
@@ -122,6 +135,11 @@ export function TimelineSection() {
           const normalized = {
             ...defaultTimelineHeader,
             ...parsed,
+            photo_urls: (parsed as any).photo_urls
+              ? [...(parsed as any).photo_urls]
+              : (parsed as any).photo_url
+              ? [(parsed as any).photo_url]
+              : [],
           };
           setHeader(normalized);
           setEditHeader(normalized);
@@ -197,6 +215,7 @@ export function TimelineSection() {
         title: "New Phase",
         description: "Describe the next step in the journey.",
         icon_url: null,
+        image_urls: [],
       },
     ]);
   };
@@ -233,36 +252,88 @@ export function TimelineSection() {
     }
   };
 
-  const uploadHeaderPhoto = async (file: File) => {
+  const uploadCardPhotos = async (id: string, files: FileList) => {
+    setUploadingCardPhotosId(id);
+    try {
+      const uploadPromises = Array.from(files).map(async (file, index) => {
+        const sanitized = `${Date.now()}_${index}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+        const filePath = `home_timeline_images/${sanitized}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("resources")
+          .upload(filePath, file, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData, error: urlError } = supabase.storage
+          .from("resources")
+          .getPublicUrl(filePath);
+
+        if (urlError) throw urlError;
+
+        return urlData.publicUrl;
+      });
+
+      const urls = await Promise.all(uploadPromises);
+
+      setEditCards((current) =>
+        current.map((card) =>
+          card.id === id
+            ? {
+                ...card,
+                image_urls: [...(card.image_urls ?? []), ...urls],
+              }
+            : card
+        )
+      );
+
+      toast.success("Photos uploaded successfully.");
+    } catch (error: any) {
+      console.error("Failed to upload photos:", error);
+      toast.error(error?.message || "Unable to upload photos.");
+    } finally {
+      setUploadingCardPhotosId(null);
+    }
+  };
+
+  const uploadHeaderPhoto = async (files: FileList) => {
     setUploadingPhoto(true);
     try {
-      const sanitized = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
-      const filePath = `home_timeline_header/${sanitized}`;
+      const uploadPromises = Array.from(files).map(async (file, index) => {
+        const sanitized = `${Date.now()}_${index}_${file.name.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+        const filePath = `home_timeline_header/${sanitized}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("resources")
-        .upload(filePath, file, { upsert: true });
+        const { error: uploadError } = await supabase.storage
+          .from("resources")
+          .upload(filePath, file, { upsert: true });
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data: urlData, error: urlError } = supabase.storage
-        .from("resources")
-        .getPublicUrl(filePath);
+        const { data: urlData, error: urlError } = supabase.storage
+          .from("resources")
+          .getPublicUrl(filePath);
 
-      if (urlError) throw urlError;
+        if (urlError) throw urlError;
 
-      setEditHeader((current) => ({ ...current, photo_url: urlData.publicUrl }));
-      toast.success("Header photo uploaded successfully.");
+        return urlData.publicUrl;
+      });
+
+      const urls = await Promise.all(uploadPromises);
+      setEditHeader((current) => ({
+        ...current,
+        photo_urls: [...(current.photo_urls ?? []), ...urls],
+      }));
+      toast.success("Header photos uploaded successfully.");
     } catch (error: any) {
-      console.error("Failed to upload header photo:", error);
-      toast.error(error?.message || "Unable to upload header photo.");
+      console.error("Failed to upload header photos:", error);
+      toast.error(error?.message || "Unable to upload header photos.");
     } finally {
       setUploadingPhoto(false);
     }
   };
 
   const removeHeaderPhoto = () => {
-    setEditHeader((current) => ({ ...current, photo_url: undefined }));
+    setEditHeader((current) => ({ ...current, photo_urls: [] }));
   };
 
   const displayedCards = editing ? editCards : cards;
@@ -296,38 +367,43 @@ export function TimelineSection() {
                 placeholder="Optional subtitle"
               />
               <div className="flex flex-col items-center gap-3">
-                {editHeader.photo_url ? (
-                  <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-border shadow-sm">
-                    <img
-                      src={editHeader.photo_url}
-                      alt="Timeline header photo"
-                      className="w-full object-cover aspect-[16/9]"
-                    />
+                {editHeader.photo_urls?.length ? (
+                  <div className="w-full max-w-3xl border border-border shadow-sm bg-slate-100 flex flex-wrap justify-center gap-4 px-2 py-4">
+                    {editHeader.photo_urls.map((url, index) => (
+                      <div key={`${url}-${index}`} className="flex justify-center w-full">
+                        <img
+                          src={url}
+                          alt={`Timeline header photo ${index + 1}`}
+                          className="mx-auto block max-w-full h-auto"
+                        />
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="w-full max-w-3xl aspect-[16/9] rounded-3xl bg-slate-100 border border-dashed border-border flex items-center justify-center text-sm text-muted-foreground">
+                  <div className="w-full max-w-3xl bg-slate-100 border border-dashed border-border flex items-center justify-center text-sm text-muted-foreground px-4 py-8">
                     No photo uploaded
                   </div>
                 )}
                 <div className="flex flex-wrap justify-center gap-3">
                   <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm hover:bg-slate-100">
                     <Upload className="w-4 h-4" />
-                    {uploadingPhoto ? "Uploading..." : "Upload center photo"}
+                    {uploadingPhoto ? "Uploading..." : "Upload center photos"}
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) uploadHeaderPhoto(e.target.files[0]);
+                        if (e.target.files?.length) uploadHeaderPhoto(e.target.files);
                       }}
                     />
                   </label>
-                  {editHeader.photo_url && (
+                  {editHeader.photo_urls?.length ? (
                     <Button variant="outline" size="sm" onClick={removeHeaderPhoto}>
                       <Trash2 className="w-4 h-4 mr-2" />
-                      Remove photo
+                      Remove photos
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -341,17 +417,21 @@ export function TimelineSection() {
                   {header.subtitle}
                 </p>
               )}
-              {header.photo_url && (
+              {header.photo_urls?.length ? (
                 <div className="mt-8 flex justify-center">
-                  <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-border shadow-sm">
-                    <img
-                      src={header.photo_url}
-                      alt="Timeline photo"
-                      className="w-full object-cover aspect-[16/9]"
-                    />
+                  <div className="w-full max-w-3xl border border-border shadow-sm bg-slate-100 flex flex-wrap justify-center gap-4 px-2 py-4">
+                    {header.photo_urls.map((url, index) => (
+                      <div key={`${url}-${index}`} className="flex justify-center w-full">
+                        <img
+                          src={url}
+                          alt={`Timeline header photo ${index + 1}`}
+                          className="mx-auto block max-w-full h-auto"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
+              ) : null}
             </>
           )}
 
@@ -419,20 +499,37 @@ export function TimelineSection() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-slate-100">
-                          <Upload className="w-4 h-4 inline-block mr-2" />
-                          {uploadingIconId === card.id ? "Uploading..." : "Upload Icon"}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) {
-                                uploadIcon(card.id, e.target.files[0]);
-                              }
-                            }}
-                          />
-                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-slate-100">
+                            <Upload className="w-4 h-4 inline-block mr-2" />
+                            {uploadingIconId === card.id ? "Uploading..." : "Upload Icon"}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                  uploadIcon(card.id, e.target.files[0]);
+                                }
+                              }}
+                            />
+                          </label>
+                          <label className="cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm hover:bg-slate-100">
+                            <Upload className="w-4 h-4 inline-block mr-2" />
+                            {uploadingCardPhotosId === card.id ? "Uploading..." : "Upload Photos"}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files?.length) {
+                                  uploadCardPhotos(card.id, e.target.files);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                         <Button variant="destructive" size="sm" onClick={() => removeCard(card.id)}>
                           <Trash2 className="w-4 h-4 mr-2" />
                           Remove
@@ -445,6 +542,23 @@ export function TimelineSection() {
                       placeholder="Card description"
                       className="min-h-[120px]"
                     />
+                    {card.image_urls?.length ? (
+                      <div className="space-y-6 pt-6">
+                        <div className="text-sm font-medium text-muted-foreground">Uploaded photos</div>
+                        <div className="flex flex-col items-center gap-8">
+                          {card.image_urls.map((url, idx) => (
+                            <div key={`${url}-${idx}`} className="w-full flex justify-center">
+                              <img
+                                src={url}
+                                alt={`${card.title} photo ${idx + 1}`}
+                                className="mx-auto block"
+                                style={{ width: "auto", maxWidth: "100%", height: "auto" }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               );
@@ -492,6 +606,20 @@ export function TimelineSection() {
                         {phase.title}
                       </h3>
                       <p className="mt-2 text-muted-foreground text-sm">{phase.description}</p>
+                      {phase.image_urls?.length ? (
+                        <div className="mt-6 flex flex-col items-center gap-8">
+                          {phase.image_urls.map((url, idx) => (
+                            <div key={`${url}-${idx}`} className="w-full flex justify-center">
+                              <img
+                                src={url}
+                                alt={`${phase.title} photo ${idx + 1}`}
+                                className="mx-auto block"
+                                style={{ width: "auto", maxWidth: "100%", height: "auto" }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
