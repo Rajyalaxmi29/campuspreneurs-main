@@ -6,6 +6,8 @@ import { Users, FileText, Shield, TrendingUp, Edit, Trash2, Eye, Download, Calen
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { TeamFormDialog } from "@/components/admin/TeamFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 
@@ -50,6 +52,13 @@ interface TeamRegistration {
   theme?: string;
 }
 
+interface ProfileSearchResult {
+  id: string;
+  name: string | null;
+  email: string | null;
+  isDeptAdmin: boolean;
+}
+
 interface ProblemStatement {
   problem_statement_id: string;
   title: string;
@@ -79,6 +88,11 @@ export default function AdminDashboard() {
   const [deleteAllConfirmDialogOpen, setDeleteAllConfirmDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<TeamRegistration | null>(null);
   const [problems, setProblems] = useState<ProblemStatement[]>([]);
+  const [deptAdminSearch, setDeptAdminSearch] = useState("");
+  const [departmentAdminResults, setDepartmentAdminResults] = useState<ProfileSearchResult[]>([]);
+  const [deptAdminSearchLoading, setDeptAdminSearchLoading] = useState(false);
+  const [deptAdminActionLoading, setDeptAdminActionLoading] = useState<string | null>(null);
+  const [deptAdminError, setDeptAdminError] = useState<string | null>(null);
 
   // Helper function to recalculate statistics
   const recalculateStats = (teams: TeamRegistration[]) => {
@@ -261,7 +275,137 @@ export default function AdminDashboard() {
 
     fetchProblems();
   }, []);
+  const searchDepartmentAdminUsers = async () => {
+    const searchTerm = deptAdminSearch.trim();
+    setDeptAdminError(null);
+    setDepartmentAdminResults([]);
 
+    if (!searchTerm) {
+      setDeptAdminError("Please enter a name or email to search.");
+      return;
+    }
+
+    setDeptAdminSearchLoading(true);
+
+    try {
+      const ilikeSearch = `%${searchTerm}%`;
+      const emailSearch = searchTerm.includes("@") ? searchTerm.trim().toLowerCase() : null;
+      let profileQuery = supabase
+        .from("profiles")
+        .select("id,name,email")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (emailSearch) {
+        profileQuery = profileQuery.or(
+          `email.eq.${emailSearch},name.ilike.${ilikeSearch},email.ilike.${ilikeSearch}`
+        );
+      } else {
+        profileQuery = profileQuery.or(`name.ilike.${ilikeSearch},email.ilike.${ilikeSearch}`);
+      }
+
+      const { data: profiles, error: profileError } = await profileQuery;
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (!profiles || profiles.length === 0) {
+        setDeptAdminError("No users found matching that name or email.");
+        return;
+      }
+
+      const userIds = profiles.map((profile) => profile.id);
+      const { data: deptRoles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "deptadmin")
+        .in("user_id", userIds);
+
+      if (rolesError) {
+        throw rolesError;
+      }
+
+      const deptAdminIds = new Set(deptRoles?.map((role) => role.user_id));
+      setDepartmentAdminResults(
+        profiles.map((profile) => ({
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          isDeptAdmin: deptAdminIds.has(profile.id),
+        }))
+      );
+    } catch (error: any) {
+      console.error("Error searching department admin users:", error);
+      setDeptAdminError(error?.message || "Unable to search users. Check your permissions.");
+    } finally {
+      setDeptAdminSearchLoading(false);
+    }
+  };
+
+  const toggleDepartmentAdminRole = async (profile: ProfileSearchResult) => {
+    setDeptAdminActionLoading(profile.id);
+    setDeptAdminError(null);
+
+    try {
+      if (profile.isDeptAdmin) {
+        const { data: updateData, error: updateError } = await supabase
+          .from("user_roles")
+          .update({ role: "student" })
+          .eq("user_id", profile.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        if (!updateData || updateData.length === 0) {
+          const { error: insertError } = await supabase
+            .from("user_roles")
+            .insert({ user_id: profile.id, role: "student" });
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+
+        setDepartmentAdminResults((current) =>
+          current.map((item) =>
+            item.id === profile.id ? { ...item, isDeptAdmin: false } : item
+          )
+        );
+      } else {
+        const { data: updateData, error: updateError } = await supabase
+          .from("user_roles")
+          .update({ role: "deptadmin" })
+          .eq("user_id", profile.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        if (!updateData || updateData.length === 0) {
+          const { error: insertError } = await supabase
+            .from("user_roles")
+            .insert({ user_id: profile.id, role: "deptadmin" });
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+
+        setDepartmentAdminResults((current) =>
+          current.map((item) =>
+            item.id === profile.id ? { ...item, isDeptAdmin: true } : item
+          )
+        );
+      }
+    } catch (error: any) {
+      console.error("Error updating department admin role:", error);
+      setDeptAdminError(error?.message || "Unable to update department admin permission.");
+    } finally {
+      setDeptAdminActionLoading(null);
+    }
+  };
   const handleEditTeam = (team: TeamRegistration) => {
     setSelectedTeam(team);
     setTeamFormDialogOpen(true);
@@ -496,6 +640,89 @@ export default function AdminDashboard() {
             Overview of inCamp statistics and management tools.
           </p>
         </div>
+      </section>
+
+      <section className="bg-card rounded-xl p-6 shadow-card mx-4 -mt-10 lg:mx-auto lg:max-w-6xl lg:-mt-12 relative z-10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-xl font-poppins font-semibold text-foreground">
+              Department Admin Assignment
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+              Search existing user profiles by name or email and grant department-admin permission only when the profile exists.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex-1 min-w-[240px]">
+              <Label htmlFor="dept-admin-search">Search name or email</Label>
+              <Input
+                id="dept-admin-search"
+                value={deptAdminSearch}
+                onChange={(e) => setDeptAdminSearch(e.target.value)}
+                placeholder="Search by user name or email"
+              />
+            </div>
+            <Button
+              onClick={searchDepartmentAdminUsers}
+              disabled={deptAdminSearchLoading || !deptAdminSearch.trim()}
+              className="whitespace-nowrap"
+            >
+              {deptAdminSearchLoading ? "Searching..." : "Search Profiles"}
+            </Button>
+          </div>
+        </div>
+
+        {deptAdminError && (
+          <p className="text-sm text-destructive mt-4">{deptAdminError}</p>
+        )}
+
+        {departmentAdminResults.length > 0 ? (
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="py-3 px-4 text-sm font-medium text-foreground">Name</th>
+                  <th className="py-3 px-4 text-sm font-medium text-foreground">Email</th>
+                  <th className="py-3 px-4 text-sm font-medium text-foreground">Status</th>
+                  <th className="py-3 px-4 text-sm font-medium text-foreground">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {departmentAdminResults.map((result) => (
+                  <tr key={result.id} className="border-b border-border/50">
+                    <td className="py-3 px-4 text-foreground">{result.name || "—"}</td>
+                    <td className="py-3 px-4 text-foreground">{result.email || "—"}</td>
+                    <td className="py-3 px-4 text-foreground text-sm">
+                      {result.isDeptAdmin ? "Department admin" : "Profile exists"}
+                    </td>
+                    <td className="py-3 px-4">
+                      <Button
+                        variant={result.isDeptAdmin ? "outline" : "orange"}
+                        size="sm"
+                        onClick={() => toggleDepartmentAdminRole(result)}
+                        disabled={deptAdminActionLoading === result.id}
+                      >
+                        {deptAdminActionLoading === result.id
+                          ? result.isDeptAdmin
+                            ? "Revoking..."
+                            : "Assigning..."
+                          : result.isDeptAdmin
+                          ? "Revoke"
+                          : "Grant"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          deptAdminSearch.trim() !== "" && (
+            <p className="text-sm text-muted-foreground mt-4">
+              Search results appear here when a matching profile is found.
+            </p>
+          )
+        )}
       </section>
 
       {/* Stats Grid */}
