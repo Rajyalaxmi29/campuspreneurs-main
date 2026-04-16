@@ -226,7 +226,7 @@ export default function DepartmentsPage() {
     <Layout>
       <section className="bg-primary py-16 lg:py-24">
         <div className="container mx-auto px-4 text-center">
-          <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground">Departments</h1>
+          <h1 className="text-3xl lg:text-5xl font-poppins font-bold text-primary-foreground">Department Approvals</h1>
           <p className="mt-4 text-primary-foreground/80 text-lg max-w-2xl mx-auto">
             Explore departments and their challenges. Browse through different themes and categories to find problems
             that align with your interests.

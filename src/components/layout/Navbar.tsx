@@ -28,7 +28,7 @@ export function Navbar() {
     ...(isAdmin
       ? [
           { name: "Dashboard", path: "/admin" },
-          { name: "Departments", path: "/departments" },
+          { name: "Approvals", path: "/departments" },
         ]
       : [{ name: "Registration", path: "/registration" }]),
     { name: "Contact", path: "/contact" },
