@@ -2,14 +2,15 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, FileText, Shield, TrendingUp, Edit, Trash2, Eye, Download, Calendar } from "lucide-react";
+import { Users, FileText, Shield, TrendingUp, Edit, Trash2, Eye, Download, Calendar, ChevronUp } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { TeamFormDialog } from "@/components/admin/TeamFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Stats {
   totalProblems: number;
@@ -52,20 +53,22 @@ interface TeamRegistration {
   theme?: string;
 }
 
-interface ProfileSearchResult {
-  id: string;
-  name: string | null;
-  email: string | null;
-  isDeptAdmin: boolean;
-}
-
 interface ProblemStatement {
   problem_statement_id: string;
   title: string;
   theme: string;
 }
 
+interface UserProfile {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
+  const { signOut } = useAuth();
   const [stats, setStats] = useState<Stats>({
     totalProblems: 0,
     totalUsers: 0,
@@ -81,18 +84,31 @@ export default function AdminDashboard() {
   const [themeFilter, setThemeFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [problemStatsFilter, setProblemStatsFilter] = useState<string>("all");
+  const [problemStatsSearchTerm, setProblemStatsSearchTerm] = useState<string>("");
+  const [problemStatsThemeFilter, setProblemStatsThemeFilter] = useState<string>("all");
+  const [problemStatsSortField, setProblemStatsSortField] = useState<"title" | "count">("count");
+  const [problemStatsSortDirection, setProblemStatsSortDirection] = useState<"asc" | "desc">("desc");
   const [teamFormDialogOpen, setTeamFormDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<TeamRegistration | null>(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [deleteAllConfirmDialogOpen, setDeleteAllConfirmDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<TeamRegistration | null>(null);
   const [problems, setProblems] = useState<ProblemStatement[]>([]);
-  const [deptAdminSearch, setDeptAdminSearch] = useState("");
-  const [departmentAdminResults, setDepartmentAdminResults] = useState<ProfileSearchResult[]>([]);
-  const [deptAdminSearchLoading, setDeptAdminSearchLoading] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [deptAdmins, setDeptAdmins] = useState<UserProfile[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogView, setDialogView] = useState<"problems" | "allUsers" | "deptAdmins" | "studentUsers" | null>(null);
+  const [studentDepartmentFilter, setStudentDepartmentFilter] = useState<string>("all");
+  const [studentYearFilter, setStudentYearFilter] = useState<string>("all");
   const [deptAdminActionLoading, setDeptAdminActionLoading] = useState<string | null>(null);
   const [deptAdminError, setDeptAdminError] = useState<string | null>(null);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+
+  const isExpiredSessionError = (message?: string | null) => {
+    if (!message) return false;
+    const normalizedMessage = message.toLowerCase();
+    return normalizedMessage.includes("jwt expired") || normalizedMessage.includes("token has expired");
+  };
 
   // Helper function to recalculate statistics
   const recalculateStats = (teams: TeamRegistration[]) => {
@@ -127,97 +143,131 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
+      setDashboardError(null);
 
-      // Fetch problems data (same logic as Problems page)
-      const { data: problems, error: problemsError } = await supabase
-        .from("problem_statements")
-        .select("*")
-        .order("problem_statement_id", { ascending: true });
+      try {
+        const [
+          problemsResponse,
+          rolesResponse,
+          profilesResponse,
+          registrationsResponse,
+          teamRegsResponse,
+          authResponse,
+        ] = await Promise.all([
+          supabase
+            .from("problem_statements")
+            .select("problem_statement_id, title, theme")
+            .order("problem_statement_id", { ascending: true }),
+          supabase
+            .from("user_roles")
+            .select("user_id, role"),
+          supabase
+            .from("profiles")
+            .select("id, name, email, created_at")
+            .order("created_at", { ascending: true }),
+          (supabase as any)
+            .from("team_registrations")
+            .select("problem_id"),
+          (supabase as any)
+            .from("team_registrations")
+            .select("*"),
+          supabase.auth.getUser(),
+        ]);
 
-      console.log("AdminDashboard - Fetched problems:", problems);
-      console.log("AdminDashboard - Fetch error:", problemsError);
+        const problemsData = problemsResponse.data || [];
+        const rolesData = rolesResponse.data || [];
+        const profilesData = profilesResponse.data || [];
+        const registrationsData = (registrationsResponse.data as { problem_id: string }[] | null) || [];
+        const teamRegsData = teamRegsResponse.data || [];
 
-      // Fetch user counts by role
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("user_id, role");
+        const queryErrors = [
+          problemsResponse.error?.message,
+          rolesResponse.error?.message,
+          profilesResponse.error?.message,
+          registrationsResponse.error?.message,
+          teamRegsResponse.error?.message,
+          authResponse.error?.message,
+        ].filter(Boolean);
 
-      const adminCount = roles?.filter((r) => r.role === "admin").length || 0;
-      const studentCount = roles?.filter((r) => r.role === "student").length || 0;
+        console.log("AdminDashboard - Fetched problems:", problemsData);
+        console.log("AdminDashboard - Fetch errors:", queryErrors);
 
-      // Check current user role
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentUserRole = roles?.find(r => r.user_id === user?.id)?.role;
-      console.log("Current user role:", currentUserRole);
+        if (queryErrors.some((message) => isExpiredSessionError(message))) {
+          await signOut();
+          return;
+        }
 
-      // Fetch team registrations per problem
-      const { data: registrations, error: regError } = await (supabase as any)
-        .from("team_registrations")
-        .select("problem_id");
+        setProblems(problemsData);
 
-      if (regError) {
-        console.error("Error fetching registrations:", regError);
-      } else {
-        console.log("Registrations fetched:", registrations);
-      }
+        const mergedUsers = profilesData.map((profile) => ({
+          ...profile,
+          role: rolesData.find((role) => role.user_id === profile.id)?.role || "student",
+        }));
 
-      const problemCountMap = (registrations as { problem_id: string }[] | null)?.reduce((acc, reg) => {
-        acc[reg.problem_id] = (acc[reg.problem_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>) || {};
+        const deptAdminCount = rolesData.filter((r) => r.role === "deptadmin").length;
+        const studentCount = rolesData.filter((r) => r.role === "student").length;
+        const currentUserRole = rolesData.find((r) => r.user_id === authResponse.data.user?.id)?.role;
 
-      const problemStatsData = problems?.map(p => ({
-        id: p.problem_statement_id,
-        title: p.title,
-        count: problemCountMap[p.problem_statement_id] || 0
-      })) || [];
+        console.log("Current user role:", currentUserRole);
 
-      // Calculate theme stats
-      const themeCountMap = problems?.reduce((acc, p) => {
-        const count = problemCountMap[p.problem_statement_id] || 0;
-        acc[p.theme] = (acc[p.theme] || 0) + count;
-        return acc;
-      }, {} as Record<string, number>) || {};
+        setAllUsers(mergedUsers);
+        setDeptAdmins(mergedUsers.filter((user) => user.role === "deptadmin"));
 
-      const themeStatsData = Object.entries(themeCountMap).map(([theme, count]) => ({
-        theme,
-        count
-      }));
+        const problemCountMap = registrationsData.reduce((acc, reg) => {
+          acc[reg.problem_id] = (acc[reg.problem_id] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
 
-      console.log("Theme Stats Data:", themeStatsData);
+        const problemStatsData = problemsData.map((problem) => ({
+          id: problem.problem_statement_id,
+          title: problem.title,
+          count: problemCountMap[problem.problem_statement_id] || 0,
+        }));
 
-      // Fetch all team registrations with problem details
-      const { data: teamRegs, error: teamError } = await (supabase as any)
-        .from("team_registrations")
-        .select("*");
+        const themeCountMap = problemsData.reduce((acc, problem) => {
+          const count = problemCountMap[problem.problem_statement_id] || 0;
+          acc[problem.theme] = (acc[problem.theme] || 0) + count;
+          return acc;
+        }, {} as Record<string, number>);
 
-      if (teamError) {
-        console.error("Error fetching team registrations:", teamError);
-      } else {
-        console.log("Team registrations fetched:", teamRegs);
-        // Add problem titles and theme info to team registrations
-        const teamRegsWithTitles = teamRegs?.map((reg: any) => {
-          const problem = problems?.find(p => p.problem_statement_id === reg.problem_id);
+        const themeStatsData = Object.entries(themeCountMap).map(([theme, count]) => ({
+          theme,
+          count,
+        }));
+
+        const teamRegsWithTitles = teamRegsData.map((reg: any) => {
+          const problem = problemsData.find((item) => item.problem_statement_id === reg.problem_id);
           return {
             ...reg,
             problem_title: problem?.title || "Unknown Problem",
-            theme: problem?.theme || "Unknown Theme"
+            theme: problem?.theme || "Unknown Theme",
           };
-        }) || [];
+        });
+
         setTeamRegistrations(teamRegsWithTitles);
+        setStats({
+          totalProblems: problemsData.length,
+          totalUsers: profilesData.length,
+          adminCount: deptAdminCount,
+          studentCount,
+        });
+        setProblemStats(problemStatsData);
+        setThemeStats(themeStatsData);
+
+        if (queryErrors.length > 0) {
+          setDashboardError(queryErrors.join(" | "));
+        }
+      } catch (error: any) {
+        console.error("Error loading admin dashboard:", error);
+        if (isExpiredSessionError(error?.message)) {
+          await signOut();
+          return;
+        }
+
+        setDashboardError(error?.message || "Unable to load dashboard data.");
+      } finally {
+        setLoading(false);
       }
-
-      setStats({
-        totalProblems: problems?.length || 0,
-        totalUsers: (roles?.length || 0),
-        adminCount,
-        studentCount,
-      });
-
-      setProblemStats(problemStatsData);
-      setThemeStats(themeStatsData);
-
-      setLoading(false);
     };
 
     fetchStats();
@@ -260,145 +310,116 @@ export default function AdminDashboard() {
     setFilteredTeams(filtered);
   }, [teamRegistrations, problemFilter, themeFilter, sortField, sortDirection]);
 
-  // Set problems state
-  useEffect(() => {
-    const fetchProblems = async () => {
-      const { data: problemsData, error } = await supabase
-        .from("problem_statements")
-        .select("problem_statement_id, title, theme")
-        .order("problem_statement_id", { ascending: true });
-
-      if (!error && problemsData) {
-        setProblems(problemsData);
-      }
-    };
-
-    fetchProblems();
-  }, []);
-  const searchDepartmentAdminUsers = async () => {
-    const searchTerm = deptAdminSearch.trim();
-    setDeptAdminError(null);
-    setDepartmentAdminResults([]);
-
-    if (!searchTerm) {
-      setDeptAdminError("Please enter a name or email to search.");
-      return;
-    }
-
-    setDeptAdminSearchLoading(true);
-
-    try {
-      const ilikeSearch = `%${searchTerm}%`;
-      const emailSearch = searchTerm.includes("@") ? searchTerm.trim().toLowerCase() : null;
-      let profileQuery = supabase
-        .from("profiles")
-        .select("id,name,email")
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (emailSearch) {
-        profileQuery = profileQuery.or(
-          `email.eq.${emailSearch},name.ilike.${ilikeSearch},email.ilike.${ilikeSearch}`
-        );
-      } else {
-        profileQuery = profileQuery.or(`name.ilike.${ilikeSearch},email.ilike.${ilikeSearch}`);
-      }
-
-      const { data: profiles, error: profileError } = await profileQuery;
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      if (!profiles || profiles.length === 0) {
-        setDeptAdminError("No users found matching that name or email.");
-        return;
-      }
-
-      const userIds = profiles.map((profile) => profile.id);
-      const { data: deptRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "deptadmin")
-        .in("user_id", userIds);
-
-      if (rolesError) {
-        throw rolesError;
-      }
-
-      const deptAdminIds = new Set(deptRoles?.map((role) => role.user_id));
-      setDepartmentAdminResults(
-        profiles.map((profile) => ({
-          id: profile.id,
-          name: profile.name,
-          email: profile.email,
-          isDeptAdmin: deptAdminIds.has(profile.id),
-        }))
-      );
-    } catch (error: any) {
-      console.error("Error searching department admin users:", error);
-      setDeptAdminError(error?.message || "Unable to search users. Check your permissions.");
-    } finally {
-      setDeptAdminSearchLoading(false);
-    }
+  const handleOpenDialog = (view: "problems" | "allUsers" | "deptAdmins" | "studentUsers") => {
+    setDialogView(view);
+    setDialogOpen(true);
   };
 
-  const toggleDepartmentAdminRole = async (profile: ProfileSearchResult) => {
-    setDeptAdminActionLoading(profile.id);
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setDialogView(null);
+  };
+
+  const filteredStudentTeams = teamRegistrations.filter((team) => {
+    if (studentDepartmentFilter !== "all" && team.department !== studentDepartmentFilter) return false;
+    if (studentYearFilter !== "all" && team.year !== studentYearFilter) return false;
+    return true;
+  });
+
+  const studentDepartments = [...new Set(teamRegistrations.map((team) => team.department).filter(Boolean))];
+  const studentYears = [...new Set(teamRegistrations.map((team) => team.year).filter(Boolean))];
+  const problemThemes = [...new Set(problems.map((problem) => problem.theme).filter(Boolean))];
+
+  const filteredProblemStats = problemStats.filter((problem) => {
+    if (
+      problemStatsSearchTerm.trim() !== "" &&
+      !problem.title.toLowerCase().includes(problemStatsSearchTerm.trim().toLowerCase())
+    ) {
+      return false;
+    }
+
+    const matchedProblem = problems.find((item) => item.problem_statement_id === problem.id);
+    if (problemStatsThemeFilter !== "all" && matchedProblem?.theme !== problemStatsThemeFilter) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const sortedProblemStats = [...filteredProblemStats].sort((a, b) => {
+    if (problemStatsSortField === "title") {
+      const comparison = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+      return problemStatsSortDirection === "asc" ? comparison : -comparison;
+    }
+
+    return problemStatsSortDirection === "asc" ? a.count - b.count : b.count - a.count;
+  });
+
+  const downloadStudentData = (format: "csv" | "excel") => {
+    const rows = filteredStudentTeams;
+    if (rows.length === 0) return;
+
+    const header = ["Team Name", "Problem", "Year", "Department", "Email", "Phone", "Registered Date"];
+    const csvBody = rows
+      .map((row) =>
+        [
+          row.team_name,
+          row.problem_title || "",
+          row.year,
+          row.department,
+          row.email,
+          row.phone,
+          row.created_at ? new Date(row.created_at).toLocaleDateString() : "",
+        ]
+          .map((value) => `"${String(value || "").replace(/"/g, '""')}"`)
+          .join(",")
+      )
+      .join("\r\n");
+
+    const csv = [header.join(","), csvBody].join("\r\n");
+    const mimeType = format === "excel" ? "application/vnd.ms-excel" : "text/csv;charset=utf-8;";
+    const extension = format === "excel" ? "xls" : "csv";
+    const blob = new Blob([csv], { type: mimeType });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `student-users-${studentDepartmentFilter}-${studentYearFilter}.${extension}`.replace(/[^a-zA-Z0-9-_.]/g, "_");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
+
+  const toggleDepartmentAdminRole = async (user: UserProfile) => {
+    setDeptAdminActionLoading(user.id);
     setDeptAdminError(null);
 
     try {
-      if (profile.isDeptAdmin) {
-        const { data: updateData, error: updateError } = await supabase
-          .from("user_roles")
-          .update({ role: "student" })
-          .eq("user_id", profile.id);
+      const newRole = user.role === "deptadmin" ? "student" : "deptadmin";
+      const { data: updateData, error: updateError } = await supabase
+        .from("user_roles")
+        .update({ role: newRole })
+        .eq("user_id", user.id);
 
-        if (updateError) {
-          throw updateError;
-        }
-
-        if (!updateData || updateData.length === 0) {
-          const { error: insertError } = await supabase
-            .from("user_roles")
-            .insert({ user_id: profile.id, role: "student" });
-
-          if (insertError) {
-            throw insertError;
-          }
-        }
-
-        setDepartmentAdminResults((current) =>
-          current.map((item) =>
-            item.id === profile.id ? { ...item, isDeptAdmin: false } : item
-          )
-        );
-      } else {
-        const { data: updateData, error: updateError } = await supabase
-          .from("user_roles")
-          .update({ role: "deptadmin" })
-          .eq("user_id", profile.id);
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        if (!updateData || updateData.length === 0) {
-          const { error: insertError } = await supabase
-            .from("user_roles")
-            .insert({ user_id: profile.id, role: "deptadmin" });
-
-          if (insertError) {
-            throw insertError;
-          }
-        }
-
-        setDepartmentAdminResults((current) =>
-          current.map((item) =>
-            item.id === profile.id ? { ...item, isDeptAdmin: true } : item
-          )
-        );
+      if (updateError) {
+        throw updateError;
       }
+
+      if (!updateData || updateData.length === 0) {
+        const { error: insertError } = await supabase
+          .from("user_roles")
+          .insert({ user_id: user.id, role: newRole });
+
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      const updatedUsers = allUsers.map((item) =>
+        item.id === user.id ? { ...item, role: newRole } : item
+      );
+
+      setAllUsers(updatedUsers);
+      setDeptAdmins(updatedUsers.filter((item) => item.role === "deptadmin"));
     } catch (error: any) {
       console.error("Error updating department admin role:", error);
       setDeptAdminError(error?.message || "Unable to update department admin permission.");
@@ -406,6 +427,7 @@ export default function AdminDashboard() {
       setDeptAdminActionLoading(null);
     }
   };
+
   const handleEditTeam = (team: TeamRegistration) => {
     setSelectedTeam(team);
     setTeamFormDialogOpen(true);
@@ -607,24 +629,28 @@ export default function AdminDashboard() {
       value: stats.totalProblems,
       icon: FileText,
       color: "bg-primary",
+      view: "problems" as const,
     },
     {
       title: "Total Registered Users",
       value: stats.totalUsers,
       icon: Users,
       color: "bg-secondary",
+      view: "allUsers" as const,
     },
     {
-      title: "Admin Users",
+      title: "Department Admins",
       value: stats.adminCount,
       icon: Shield,
       color: "bg-accent",
+      view: "deptAdmins" as const,
     },
     {
       title: "Student Users",
       value: stats.studentCount,
       icon: TrendingUp,
       color: "bg-muted",
+      view: "studentUsers" as const,
     },
   ];
 
@@ -642,89 +668,6 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      <section className="bg-card rounded-xl p-6 shadow-card mx-4 -mt-10 lg:mx-auto lg:max-w-6xl lg:-mt-12 relative z-10">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="text-xl font-poppins font-semibold text-foreground">
-              Department Admin Assignment
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              Search existing user profiles by name or email and grant department-admin permission only when the profile exists.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex-1 min-w-[240px]">
-              <Label htmlFor="dept-admin-search">Search name or email</Label>
-              <Input
-                id="dept-admin-search"
-                value={deptAdminSearch}
-                onChange={(e) => setDeptAdminSearch(e.target.value)}
-                placeholder="Search by user name or email"
-              />
-            </div>
-            <Button
-              onClick={searchDepartmentAdminUsers}
-              disabled={deptAdminSearchLoading || !deptAdminSearch.trim()}
-              className="whitespace-nowrap"
-            >
-              {deptAdminSearchLoading ? "Searching..." : "Search Profiles"}
-            </Button>
-          </div>
-        </div>
-
-        {deptAdminError && (
-          <p className="text-sm text-destructive mt-4">{deptAdminError}</p>
-        )}
-
-        {departmentAdminResults.length > 0 ? (
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="py-3 px-4 text-sm font-medium text-foreground">Name</th>
-                  <th className="py-3 px-4 text-sm font-medium text-foreground">Email</th>
-                  <th className="py-3 px-4 text-sm font-medium text-foreground">Status</th>
-                  <th className="py-3 px-4 text-sm font-medium text-foreground">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {departmentAdminResults.map((result) => (
-                  <tr key={result.id} className="border-b border-border/50">
-                    <td className="py-3 px-4 text-foreground">{result.name || "—"}</td>
-                    <td className="py-3 px-4 text-foreground">{result.email || "—"}</td>
-                    <td className="py-3 px-4 text-foreground text-sm">
-                      {result.isDeptAdmin ? "Department admin" : "Profile exists"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <Button
-                        variant={result.isDeptAdmin ? "outline" : "orange"}
-                        size="sm"
-                        onClick={() => toggleDepartmentAdminRole(result)}
-                        disabled={deptAdminActionLoading === result.id}
-                      >
-                        {deptAdminActionLoading === result.id
-                          ? result.isDeptAdmin
-                            ? "Revoking..."
-                            : "Assigning..."
-                          : result.isDeptAdmin
-                          ? "Revoke"
-                          : "Grant"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          deptAdminSearch.trim() !== "" && (
-            <p className="text-sm text-muted-foreground mt-4">
-              Search results appear here when a matching profile is found.
-            </p>
-          )
-        )}
-      </section>
-
       {/* Stats Grid */}
       <section className="py-16 lg:py-24 bg-background">
         <div className="container mx-auto px-4">
@@ -737,13 +680,20 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
+              {dashboardError && (
+                <div className="mb-6 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {dashboardError}
+                </div>
+              )}
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 {statCards.map((stat) => {
                   const Icon = stat.icon;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={stat.title}
-                      className="bg-card rounded-xl p-6 shadow-card hover:shadow-elevated transition-all"
+                      onClick={() => handleOpenDialog(stat.view)}
+                      className="text-left bg-card rounded-xl p-6 shadow-card hover:shadow-elevated transition-all"
                     >
                       <div className={`w-12 h-12 rounded-lg ${stat.color} flex items-center justify-center mb-4`}>
                         <Icon className="w-6 h-6 text-primary-foreground" />
@@ -752,10 +702,231 @@ export default function AdminDashboard() {
                       <p className="text-3xl font-poppins font-bold text-foreground mt-1">
                         {stat.value}
                       </p>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
+
+              <Dialog open={dialogOpen} onOpenChange={(open) => {
+                if (!open) {
+                  handleCloseDialog();
+                }
+              }}>
+                <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-hidden overflow-y-auto rounded-3xl p-6">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {dialogView === "problems" && "Problem Statements"}
+                      {dialogView === "allUsers" && "All Registered Users"}
+                      {dialogView === "deptAdmins" && "Department Admins"}
+                      {dialogView === "studentUsers" && "Student Users"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {dialogView === "problems" && "Review problem statements and registration counts."}
+                      {dialogView === "allUsers" && "View all registered users in the system."}
+                      {dialogView === "deptAdmins" && "View all users with department admin access."}
+                      {dialogView === "studentUsers" && "View student team details filtered by department or year, then download the visible data."}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="mt-6 space-y-6">
+                    {dialogView === "problems" && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[600px] border-separate border-spacing-y-2">
+                          <thead>
+                            <tr className="text-left text-sm font-semibold text-foreground border-b border-border">
+                              <th className="py-3 px-4">Problem Title</th>
+                              <th className="py-3 px-4">Theme</th>
+                              <th className="py-3 px-4">Registered Teams</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {problemStats.length > 0 ? (
+                              problemStats.map((problem) => {
+                                const matchedProblem = problems.find((item) => item.problem_statement_id === problem.id);
+                                return (
+                                  <tr key={problem.id} className="border-b border-border/50">
+                                    <td className="py-3 px-4 text-foreground">{problem.title}</td>
+                                    <td className="py-3 px-4 text-foreground capitalize">{matchedProblem?.theme || "—"}</td>
+                                    <td className="py-3 px-4 text-foreground font-semibold">{problem.count}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={3} className="py-6 text-center text-muted-foreground">
+                                  No problem statements available.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {dialogView === "allUsers" && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[640px] border-separate border-spacing-y-2">
+                          <thead>
+                            <tr className="text-left text-sm font-semibold text-foreground border-b border-border">
+                              <th className="py-3 px-4">Name</th>
+                              <th className="py-3 px-4">Email</th>
+                              <th className="py-3 px-4">Role</th>
+                              <th className="py-3 px-4">Joined</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allUsers.length > 0 ? (
+                              allUsers.map((user) => (
+                                <tr key={user.id} className="border-b border-border/50">
+                                  <td className="py-3 px-4 text-foreground">{user.name || "—"}</td>
+                                  <td className="py-3 px-4 text-foreground">{user.email || "—"}</td>
+                                  <td className="py-3 px-4 text-foreground capitalize">{user.role}</td>
+                                  <td className="py-3 px-4 text-foreground text-sm">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                                  No registered users found.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {dialogView === "deptAdmins" && (
+                      <div className="space-y-4">
+                        {deptAdminError && (
+                          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+                            {deptAdminError}
+                          </div>
+                        )}
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[640px] border-separate border-spacing-y-2">
+                            <thead>
+                              <tr className="text-left text-sm font-semibold text-foreground border-b border-border">
+                                <th className="py-3 px-4">Name</th>
+                                <th className="py-3 px-4">Email</th>
+                                <th className="py-3 px-4">Joined</th>
+                                <th className="py-3 px-4">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deptAdmins.length > 0 ? (
+                                deptAdmins.map((user) => (
+                                  <tr key={user.id} className="border-b border-border/50">
+                                    <td className="py-3 px-4 text-foreground">{user.name || "—"}</td>
+                                    <td className="py-3 px-4 text-foreground">{user.email || "—"}</td>
+                                    <td className="py-3 px-4 text-foreground text-sm">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}</td>
+                                    <td className="py-3 px-4">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => toggleDepartmentAdminRole(user)}
+                                        disabled={deptAdminActionLoading === user.id}
+                                      >
+                                        {deptAdminActionLoading === user.id ? "Updating..." : "Revoke"}
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                                    No department admins assigned yet.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {dialogView === "studentUsers" && (
+                      <div className="space-y-6">
+                        <div className="grid md:grid-cols-3 gap-4 items-end">
+                          <div>
+                            <Label htmlFor="student-filter-department">Filter by Department</Label>
+                            <select
+                              id="student-filter-department"
+                              value={studentDepartmentFilter}
+                              onChange={(e) => setStudentDepartmentFilter(e.target.value)}
+                              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              <option value="all">All Departments</option>
+                              {studentDepartments.map((dept) => (
+                                <option key={dept} value={dept}>{dept}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <Label htmlFor="student-filter-year">Filter by Year</Label>
+                            <select
+                              id="student-filter-year"
+                              value={studentYearFilter}
+                              onChange={(e) => setStudentYearFilter(e.target.value)}
+                              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              <option value="all">All Years</option>
+                              {studentYears.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button onClick={() => downloadStudentData("csv")}>
+                              Download CSV
+                            </Button>
+                            <Button onClick={() => downloadStudentData("excel")}>
+                              Download Excel
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[760px] border-separate border-spacing-y-2">
+                            <thead>
+                              <tr className="text-left text-sm font-semibold text-foreground border-b border-border">
+                                <th className="py-3 px-4">Team Name</th>
+                                <th className="py-3 px-4">Problem</th>
+                                <th className="py-3 px-4">Year</th>
+                                <th className="py-3 px-4">Department</th>
+                                <th className="py-3 px-4">Email</th>
+                                <th className="py-3 px-4">Phone</th>
+                                <th className="py-3 px-4">Registered</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredStudentTeams.length > 0 ? (
+                                filteredStudentTeams.map((team) => (
+                                  <tr key={team.id} className="border-b border-border/50">
+                                    <td className="py-3 px-4 text-foreground">{team.team_name}</td>
+                                    <td className="py-3 px-4 text-foreground">{team.problem_title || "—"}</td>
+                                    <td className="py-3 px-4 text-foreground">{team.year}</td>
+                                    <td className="py-3 px-4 text-foreground">{team.department}</td>
+                                    <td className="py-3 px-4 text-foreground">{team.email}</td>
+                                    <td className="py-3 px-4 text-foreground">{team.phone}</td>
+                                    <td className="py-3 px-4 text-foreground text-sm">{team.created_at ? new Date(team.created_at).toLocaleDateString() : "—"}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                                    No student data matches the selected filters.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Registration Statistics */}
               <Accordion type="multiple" className="w-full space-y-4">
@@ -769,39 +940,134 @@ export default function AdminDashboard() {
                     {problemStats.length > 0 ? (
                       <>
                         {/* Filter Control */}
-                        <div className="mb-6">
-                          <label className="block text-sm font-medium text-foreground mb-2">
-                            Filter by Problem Statement
-                          </label>
-                          <select
-                            value={problemStatsFilter}
-                            onChange={(e) => setProblemStatsFilter(e.target.value)}
-                            className="w-full max-w-xs px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                          >
-                            <option value="all">All Problems</option>
-                            {problemStats.map((problem) => (
-                              <option key={problem.id} value={problem.id}>
-                                {problem.title}
-                              </option>
-                            ))}
-                          </select>
+                        <div className="mb-6 space-y-4">
+                          <div className="flex flex-wrap gap-4">
+                            <div className="flex-1 min-w-[220px]">
+                              <label className="block text-sm font-medium text-foreground mb-2">
+                                Search Problem Statement
+                              </label>
+                              <input
+                                type="text"
+                                value={problemStatsSearchTerm}
+                                onChange={(e) => setProblemStatsSearchTerm(e.target.value)}
+                                placeholder="Search by problem title"
+                                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+
+                            <div className="flex-1 min-w-[220px]">
+                              <label className="block text-sm font-medium text-foreground mb-2">
+                                Filter by Theme
+                              </label>
+                              <select
+                                value={problemStatsThemeFilter}
+                                onChange={(e) => setProblemStatsThemeFilter(e.target.value)}
+                                className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                              >
+                                <option value="all">All Themes</option>
+                                {problemThemes.map((theme) => (
+                                  <option key={theme} value={theme}>
+                                    {theme}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
                         </div>
 
                         <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead>
                               <tr className="border-b border-border">
-                                <th className="text-left py-2 px-4 font-medium text-foreground">Problem Title</th>
-                                <th className="text-right py-2 px-4 font-medium text-foreground">Registered Teams</th>
+                                <th className="text-left py-2 px-4 font-medium text-foreground">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setProblemStatsSortField("title");
+                                        setProblemStatsSortDirection((currentDirection) =>
+                                          problemStatsSortField === "title" && currentDirection === "asc" ? "desc" : "asc"
+                                        );
+                                      }}
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
+                                      aria-label={`Sort problem title ${
+                                        problemStatsSortField === "title" && problemStatsSortDirection === "asc"
+                                          ? "descending"
+                                          : "ascending"
+                                      }`}
+                                      title={`Sort problem title ${
+                                        problemStatsSortField === "title" && problemStatsSortDirection === "asc"
+                                          ? "descending"
+                                          : "ascending"
+                                      }`}
+                                    >
+                                      <ChevronUp
+                                        className={`h-4 w-4 transition-transform ${
+                                          problemStatsSortField !== "title" || problemStatsSortDirection === "desc"
+                                            ? "rotate-180"
+                                            : ""
+                                        }`}
+                                      />
+                                    </button>
+                                    <span>Problem Title</span>
+                                  </div>
+                                </th>
+                                <th className="text-left py-2 px-4 font-medium text-foreground">Theme</th>
+                                <th className="text-right py-2 px-4 font-medium text-foreground">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setProblemStatsSortField("count");
+                                        setProblemStatsSortDirection((currentDirection) =>
+                                          problemStatsSortField === "count" && currentDirection === "asc" ? "desc" : "asc"
+                                        );
+                                      }}
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1"
+                                      aria-label={`Sort registered teams ${
+                                        problemStatsSortField === "count" && problemStatsSortDirection === "asc"
+                                          ? "descending"
+                                          : "ascending"
+                                      }`}
+                                      title={`Sort registered teams ${
+                                        problemStatsSortField === "count" && problemStatsSortDirection === "asc"
+                                          ? "descending"
+                                          : "ascending"
+                                      }`}
+                                    >
+                                      <ChevronUp
+                                        className={`h-4 w-4 transition-transform ${
+                                          problemStatsSortField !== "count" || problemStatsSortDirection === "desc"
+                                            ? "rotate-180"
+                                            : ""
+                                        }`}
+                                      />
+                                    </button>
+                                    <span>Registered Teams</span>
+                                  </div>
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {(problemStatsFilter === "all" ? problemStats : problemStats.filter(problem => problem.id === problemStatsFilter)).map((problem) => (
-                                <tr key={problem.id} className="border-b border-border/50">
-                                  <td className="py-3 px-4 text-foreground">{problem.title}</td>
-                                  <td className="py-3 px-4 text-right font-semibold text-primary">{problem.count}</td>
+                              {sortedProblemStats.length > 0 ? (
+                                sortedProblemStats.map((problem) => {
+                                  const matchedProblem = problems.find((item) => item.problem_statement_id === problem.id);
+
+                                  return (
+                                    <tr key={problem.id} className="border-b border-border/50">
+                                      <td className="py-3 px-4 text-foreground">{problem.title}</td>
+                                      <td className="py-3 px-4 text-foreground">{matchedProblem?.theme || "—"}</td>
+                                      <td className="py-3 px-4 text-right font-semibold text-primary">{problem.count}</td>
+                                    </tr>
+                                  );
+                                })
+                              ) : (
+                                <tr>
+                                  <td colSpan={3} className="py-6 text-center text-muted-foreground">
+                                    No problem statements match the selected filters.
+                                  </td>
                                 </tr>
-                              ))}
+                              )}
                             </tbody>
                           </table>
                         </div>

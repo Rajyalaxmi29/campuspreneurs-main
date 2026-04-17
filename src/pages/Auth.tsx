@@ -46,6 +46,8 @@ const signupSchema = z.object({
     .refine(validateGcetEmail, {
       message: "Only GCET college email IDs are allowed for registration.",
     }),
+  department: z.string().min(1, "Please select your department"),
+  year: z.string().min(1, "Please select your year of study"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -62,6 +64,8 @@ export default function Auth() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    department: "",
+    year: "",
     password: "",
     confirmPassword: "",
   });
@@ -119,7 +123,7 @@ export default function Auth() {
     void routeUserAfterLogin(user.id, "/");
   }, [user, isPostLoginRouting, routeUserAfterLogin]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     // Clear error when user types
@@ -226,7 +230,13 @@ export default function Auth() {
           return;
         }
 
-        const { error } = await signUp(formData.email, formData.password, formData.name);
+        const { error } = await signUp(
+          formData.email,
+          formData.password,
+          formData.name,
+          formData.department,
+          formData.year,
+        );
         if (error) {
           // Handle specific error messages
           if (error.message.includes("already registered")) {
@@ -305,7 +315,13 @@ export default function Auth() {
                   </Button>
                   <Button
                     onClick={async () => {
-                      const { error } = await signUp(formData.email, formData.password, formData.name);
+                      const { error } = await signUp(
+                        formData.email,
+                        formData.password,
+                        formData.name,
+                        formData.department,
+                        formData.year,
+                      );
                       if (error) {
                         toast({
                           title: "Error",
@@ -360,21 +376,68 @@ export default function Auth() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Name field (signup only) */}
                 {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      type="text"
-                      placeholder="John Doe"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className={errors.name ? "border-destructive" : ""}
-                    />
-                    {errors.name && (
-                      <p className="text-sm text-destructive">{errors.name}</p>
-                    )}
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Full Name</Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        type="text"
+                        placeholder="John Doe"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className={errors.name ? "border-destructive" : ""}
+                      />
+                      {errors.name && (
+                        <p className="text-sm text-destructive">{errors.name}</p>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="department">Department</Label>
+                        <select
+                          id="department"
+                          name="department"
+                          value={formData.department}
+                          onChange={handleInputChange}
+                          className={`w-full rounded-md border px-3 py-2 text-foreground transition focus:outline-none focus:ring-2 focus:ring-primary ${errors.department ? "border-destructive" : "border-border"}`}
+                        >
+                          <option value="">Select Department</option>
+                          <option value="AIML">AIML</option>
+                          <option value="CSE">CSE</option>
+                          <option value="ECE">ECE</option>
+                          <option value="EEE">EEE</option>
+                          <option value="MECH">MECH</option>
+                          <option value="CIVIL">CIVIL</option>
+                          <option value="MBA">MBA</option>
+                          <option value="PHARMACY">PHARMACY</option>
+                        </select>
+                        {errors.department && (
+                          <p className="text-sm text-destructive">{errors.department}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="year">Year of Study</Label>
+                        <select
+                          id="year"
+                          name="year"
+                          value={formData.year}
+                          onChange={handleInputChange}
+                          className={`w-full rounded-md border px-3 py-2 text-foreground transition focus:outline-none focus:ring-2 focus:ring-primary ${errors.year ? "border-destructive" : "border-border"}`}
+                        >
+                          <option value="">Select Year</option>
+                          <option value="1">1st Year</option>
+                          <option value="2">2nd Year</option>
+                          <option value="3">3rd Year</option>
+                          <option value="4">4th Year</option>
+                        </select>
+                        {errors.year && (
+                          <p className="text-sm text-destructive">{errors.year}</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Email */}
